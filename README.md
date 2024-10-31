@@ -1,4 +1,4 @@
-# Ransom Notes (Online Version)
+# Quipnotes
 
 This project was inspired by the hit game called ["Ransom Notes" by Very Special Games](https://www.veryspecialgames.com/products/ransom-notes-the-ridiculous-word-magnet-game). The best way to experience this game is to buy the original and use the prompt cards located there. 
 
