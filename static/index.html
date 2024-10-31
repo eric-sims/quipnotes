@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Test</title>
+</head>
+<body>
+    <h1>WebSocket Client</h1>
+    <button onclick="getWords()">Get Words</button>
+    <pre id="output"></pre>
+
+    <script>
+        const output = document.getElementById("output");
+        const ws = new WebSocket("ws://localhost:8080/ws?playerID=ericsims");
+
+        ws.onopen = () => {
+            output.innerText += "Connected to WebSocket\n";
+        };
+
+        ws.onmessage = (event) => {
+            output.innerText += `Server: ${event.data}\n`;
+        };
+
+        ws.onclose = () => {
+            output.innerText += "Disconnected from WebSocket\n";
+        };
+
+        function getWords() {
+            ws.send(JSON.stringify({
+                "command": "draw_words"
+            }))
+        }
+    </script>
+</body>
+</html>
