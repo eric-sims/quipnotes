@@ -8,5 +8,10 @@ My family loves the game "Quiplash" by Jackbox Games because it is easy to play 
 
 ## How to start
 
+### Environment Setup
+1. Copy `.env.example` to `.env`.
+2. Fill in the actual values in the `.env` file.
+
+
 ## Clients
 

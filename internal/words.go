@@ -9,14 +9,14 @@ import (
 	"strconv"
 )
 
-type Words map[string]bool
+type IsDrawn bool
 
-var WordStore Words
+var WordStore map[string]IsDrawn
 
 // LoadWordsFromCSV - Function to load words from a CSV file into the global Words structure
 func LoadWordsFromCSV(filepath string) error {
 	// Initialize the global Words structure
-	WordStore = make(map[string]bool)
+	WordStore = make(map[string]IsDrawn)
 
 	// Open the CSV file
 	file, err := os.Open(filepath)

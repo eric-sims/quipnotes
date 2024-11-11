@@ -49,24 +49,31 @@ func HandleConnections(w http.ResponseWriter, r *http.Request) {
 		if cmd, ok := msg["command"].(string); ok {
 			switch cmd {
 			case "draw_words":
-				words, err := RetrieveNWords(5)
-				if err != nil {
-					log.Println(err)
-				}
-				player.wordsDrawn = append(player.wordsDrawn, words...)
-				wdMsg, err := JsonEncode(player.wordsDrawn)
-				if err != nil {
-					log.Println(err)
-				}
-				err = player.Conn.WriteMessage(websocket.TextMessage, wdMsg)
-				if err != nil {
-					log.Println(err)
-				}
+				Game.DrawWordsFromList(5, player)
 			case "turn_in_ransom_note":
 				// list of words
+				note := msg["note"].([]interface{})
+				Game.TurnInRansomNote(note, player)
 			case "trade_words":
 				// given a set of words, n number of words from the pile can be exchanged
+				words := msg["words"].([]interface{})
+				Game.TradeWords(words, player)
+			default:
+				err := conn.WriteMessage(websocket.TextMessage, []byte("could not find message"))
+				if err != nil {
+					log.Println("Error writing message:", err)
+				}
+				continue
 			}
+		}
+
+		wdMsg, err := JsonEncode(player.wordsDrawn)
+		if err != nil {
+			log.Println(err)
+		}
+		err = player.Conn.WriteMessage(websocket.TextMessage, wdMsg)
+		if err != nil {
+			log.Println(err)
 		}
 	}
 }

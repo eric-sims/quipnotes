@@ -4,3 +4,7 @@
 # Buy the game and put the words in yourself. Or, you can make up
 # your own list!
 data/words.csv
+
+.env
+.env.local
+bin
