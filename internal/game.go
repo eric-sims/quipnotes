@@ -40,13 +40,13 @@ func (gm *GameManager) RemovePlayer(id string) {
 	//delete(gm.players, id)
 }
 
-func (gm *GameManager) TradeWords(words []any, player *Player) {
+func (gm *GameManager) TradeWords(words []string, player *Player) {
 	gm.mux.Lock()
 	defer gm.mux.Unlock()
 
-	data := convertWords(words)
+	// data := convertWords(words)
 
-	for _, word := range data {
+	for _, word := range words {
 		player.RemoveWord(word)
 	}
 
@@ -66,11 +66,10 @@ func (gm *GameManager) DrawWordsFromList(n int, player *Player) {
 }
 
 // TurnInRansomNote - reads off the ransom note and puts the tiles back into the WordStore
-func (gm *GameManager) TurnInRansomNote(note []any, player *Player) {
-	data := convertWords(note)
+func (gm *GameManager) TurnInRansomNote(note []string, player *Player) {
 	fmt.Println("RECEIVED NOTE:")
 	// TODO: Handle Ransom Note logic
-	for _, word := range data {
+	for _, word := range note {
 		if len(strings.Split(word, "|")) < 2 {
 			log.Println("Found word with wrong format")
 			continue

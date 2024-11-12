@@ -3,47 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebSocket Test</title>
+    <title>Word Tile Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+        #tileContainer {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            width: 80%;
+            margin: 20px 0;
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+        .tile {
+            padding: 10px;
+            border: 1px solid #444;
+            text-align: center;
+            cursor: pointer;
+            user-select: none;
+            background-color: #f0f0f0;
+        }
+        #selectedWords {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+    </style>
 </head>
 <body>
-    <h1>WebSocket Client</h1>
-    <button onclick="getWords()">Get Words</button>
-    <button onclick="turnInRansomNote()">Turn In Ransom Note</button>
-    <pre id="output"></pre>
+    <h1>Word Tile Game</h1>
+    <button id="drawButton">Draw 5 Tiles</button>
+    <button id="drawOneButton">Draw One Tile</button>
+    <div id="tileContainer"></div>
+    <div id="selectedWords">Selected Words: </div>
+    <button id="submitButton">Submit</button>
 
-    <script>
-        const output = document.getElementById("output");
-        const ws = new WebSocket("ws://localhost:8080/ws?playerID=ericsims");
-        var wordList = [];
-
-        ws.onopen = () => {
-            output.innerText += "Connected to WebSocket\n";
-        };
-
-        ws.onmessage = (event) => {
-            // Parse the received JSON data into an array
-            const receivedData = JSON.parse(event.data);
-            wordList = receivedData;
-
-            output.innerText += `Server: ${receivedData.map(str => str.split('|')[1])}\n`;
-        };
-
-        ws.onclose = () => {
-            output.innerText += "Disconnected from WebSocket\n";
-        };
-
-        function getWords() {
-            ws.send(JSON.stringify({
-                "command": "draw_words"
-            }))
-        }
-
-        function turnInRansomNote() {
-            ws.send(JSON.stringify({
-                "command": "turn_in_ransom_note",
-                "note": ["1|one", "2|two", "3|three"],
-            }))
-        }
-    </script>
+    <script src="app.js"></script>
 </body>
 </html>

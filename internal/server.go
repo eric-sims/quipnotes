@@ -1,11 +1,18 @@
 package internal
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 
 	"github.com/gorilla/websocket"
 )
+
+type Message struct {
+	Command string   `json:"command"`
+	Words   []string `json:"words"`
+	Count   *int     `json:"count,omitempty"`
+}
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
@@ -38,33 +45,39 @@ func HandleConnections(w http.ResponseWriter, r *http.Request) {
 
 	// Process incoming messages in a loop
 	for {
-		var msg map[string]interface{}
-		err := conn.ReadJSON(&msg)
+		var message Message
+		_, recievedBytes, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("Error reading JSON:", err)
-			break
+			log.Fatal("Could not read message")
+			continue
+		}
+
+		if err := json.Unmarshal(recievedBytes, &message); err != nil {
+			log.Fatal("Could not unmarshal message")
+			continue
 		}
 
 		// Check for "command" field to determine action type
-		if cmd, ok := msg["command"].(string); ok {
-			switch cmd {
-			case "draw_words":
-				Game.DrawWordsFromList(5, player)
-			case "turn_in_ransom_note":
-				// list of words
-				note := msg["note"].([]interface{})
-				Game.TurnInRansomNote(note, player)
-			case "trade_words":
-				// given a set of words, n number of words from the pile can be exchanged
-				words := msg["words"].([]interface{})
-				Game.TradeWords(words, player)
-			default:
-				err := conn.WriteMessage(websocket.TextMessage, []byte("could not find message"))
-				if err != nil {
-					log.Println("Error writing message:", err)
-				}
-				continue
+		switch message.Command {
+		case "draw_words":
+			count := message.Count
+			if count != nil {
+				Game.DrawWordsFromList(*count, player)
+			} else {
+				log.Fatal("Could not draw words!")
 			}
+		case "turn_in_ransom_note":
+			// list of words
+			Game.TurnInRansomNote(message.Words, player)
+		case "trade_words":
+			// given a set of words, n number of words from the pile can be exchanged
+			Game.TradeWords(message.Words, player)
+		default:
+			err := conn.WriteMessage(websocket.TextMessage, []byte("could not find message"))
+			if err != nil {
+				log.Println("Error writing message:", err)
+			}
+			continue
 		}
 
 		wdMsg, err := JsonEncode(player.wordsDrawn)
