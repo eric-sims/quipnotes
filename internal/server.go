@@ -46,14 +46,14 @@ func HandleConnections(w http.ResponseWriter, r *http.Request) {
 	// Process incoming messages in a loop
 	for {
 		var message Message
-		_, recievedBytes, err := conn.ReadMessage()
+		_, receivedBytes, err := conn.ReadMessage()
 		if err != nil {
-			log.Fatal("Could not read message")
+			log.Println("Could not read message")
 			continue
 		}
 
-		if err := json.Unmarshal(recievedBytes, &message); err != nil {
-			log.Fatal("Could not unmarshal message")
+		if err := json.Unmarshal(receivedBytes, &message); err != nil {
+			log.Println("Could not unmarshal message")
 			continue
 		}
 
@@ -64,7 +64,7 @@ func HandleConnections(w http.ResponseWriter, r *http.Request) {
 			if count != nil {
 				Game.DrawWordsFromList(*count, player)
 			} else {
-				log.Fatal("Could not draw words!")
+				log.Println("Could not draw words!")
 			}
 		case "turn_in_ransom_note":
 			// list of words
@@ -87,6 +87,7 @@ func HandleConnections(w http.ResponseWriter, r *http.Request) {
 		err = player.Conn.WriteMessage(websocket.TextMessage, wdMsg)
 		if err != nil {
 			log.Println(err)
+			log.Fatal()
 		}
 	}
 }
