@@ -14,6 +14,9 @@ together my skills to make this!
 
 ### Environment Setup
 1. Copy `.env.example` to `.env`.
+```
+cp .env.example .env
+```
 2. Fill in the actual values in the `.env` file.
 
 ### Populate a words.csv file
