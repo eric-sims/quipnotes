@@ -1,14 +1,19 @@
 # Quipnotes
 
-This project was inspired by the hit game called ["Ransom Notes" by Very Special Games](https://www.veryspecialgames.com/products/ransom-notes-the-ridiculous-word-magnet-game). The best way to experience
-this game is to buy the original and use the prompt cards located there. 
+This project was inspired by a combination of two popular games: ["Ransom Notes" by Very Special Games](https://www.veryspecialgames.com/products/ransom-notes-the-ridiculous-word-magnet-game) 
+and ["Quiplash" by Jackbox Games](https://www.jackboxgames.com/games/quiplash). 
+
+The best way to experience this game is to buy "Ransom Notes" and use the prompt cards located there. 
 
 ## The Problem
 
-My family loves the game ["Quiplash" by Jackbox Games](https://www.jackboxgames.com/games/quiplash) because it is easy 
-to play. Also, we can enjoy it from the comfort of our living room! We've recently discovered "Ransom Notes" and also 
-love it! But we wanted to enjoy the same level of convenience that "Quiplash" offers. Therefore, I thought of putting 
-together my skills to make this!
+My family enjoys playing "Quiplash" at parties because of its ease of use and ability for fun! Later, 
+we started playing "Ransom Notes" which is also loads of fun! However, "Ransom Notes" is not as easy 
+to play because it requires sitting around a table or hard surface. If you don't do this, you'll risk 
+losing the _tiny_ word tiles that are crucial for this game.
+
+Therefore I started this project, which aims to make "Ransom Notes" as easy to play as any other JackBox-like
+games.
 
 ## How to start
 
