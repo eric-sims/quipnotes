@@ -2,13 +2,10 @@ package internal
 
 import (
 	"slices"
-
-	"github.com/gorilla/websocket"
 )
 
 type Player struct {
 	ID         string
-	Conn       *websocket.Conn
 	wordsDrawn []string
 }
 

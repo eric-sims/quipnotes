@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Word Tile Game</title>
+    <title>quipNotes</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -12,40 +12,61 @@
             align-items: center;
             margin: 0;
             padding: 20px;
+            max-height: calc(100vh - 40px);
         }
         #tileContainer {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            grid-auto-flow: row dense; /* Ensures tiles are aligned in rows */
+            grid-template-columns: repeat(auto-fill, minmax(100px, max-content));
             gap: 10px;
-            max-height: 300px;
             overflow-y: auto;
             width: 80%;
             margin: 20px 0;
             border: 1px solid #ccc;
             padding: 10px;
+            font: 20px Courier;
         }
         .tile {
             padding: 10px;
             border: 1px solid #444;
-            text-align: center;
-            cursor: pointer;
-            user-select: none;
             background-color: #f0f0f0;
+            display: inline-flex; /* Allows tile to grow based on content */
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            white-space: nowrap; /* Prevents word wrapping */
+
+            /* Optional min and max width to control extremes */
+            min-width: 60px;
+            max-width: 300px;
         }
         #selectedWords {
             margin-top: 20px;
+            font: 20px Courier;
             font-weight: bold;
         }
+        .gameButton {
+            :disabled;
+        }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 </head>
 <body>
-    <h1>Word Tile Game</h1>
-    <button id="drawButton">Draw 5 Tiles</button>
-    <button id="drawOneButton">Draw One Tile</button>
+    <h1>quipNotes</h1>
+    <div style="display: flex; gap: 10px; padding: 10px;">
+        <label for="playerName">Player Name: </label>
+        <input id="playerName" class="setupButton">
+        <button id="addPlayerButton" class="setupButton">Add Player</button>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: center; padding: 10px;">
+        <button id="drawButton" class="gameButton">Draw 5 Tiles</button><button id="drawOneButton" class="gameButton">Draw One Tile</button>
+    </div>
     <div id="tileContainer"></div>
     <div id="selectedWords">Selected Words: </div>
-    <button id="submitButton">Submit</button>
-
+    <div style="display: flex; gap: 10px;">
+        <button id="submitButton" class="gameButton">Submit Note!</button>
+        <button id="resetButton" class="gameButton">Reset Note</button>
+    </div>
     <script src="app.js"></script>
 </body>
 </html>

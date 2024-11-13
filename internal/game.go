@@ -36,15 +36,12 @@ func (gm *GameManager) RemovePlayer(id string) {
 		gm.players[id].RemoveWord(s)
 	}
 
-	// What if a web socket connection randomly disconnects!
-	//delete(gm.players, id)
+	delete(gm.players, id)
 }
 
 func (gm *GameManager) TradeWords(words []string, player *Player) {
 	gm.mux.Lock()
 	defer gm.mux.Unlock()
-
-	// data := convertWords(words)
 
 	for _, word := range words {
 		player.RemoveWord(word)
@@ -58,6 +55,8 @@ func (gm *GameManager) TradeWords(words []string, player *Player) {
 }
 
 func (gm *GameManager) DrawWordsFromList(n int, player *Player) {
+	gm.mux.Lock()
+	defer gm.mux.Unlock()
 	words, err := RetrieveNWords(n)
 	if err != nil {
 		log.Println(err)
@@ -67,6 +66,8 @@ func (gm *GameManager) DrawWordsFromList(n int, player *Player) {
 
 // TurnInRansomNote - reads off the ransom note and puts the tiles back into the WordStore
 func (gm *GameManager) TurnInRansomNote(note []string, player *Player) {
+	gm.mux.Lock()
+	defer gm.mux.Unlock()
 	fmt.Println("RECEIVED NOTE:")
 	// TODO: Handle Ransom Note logic
 	for _, word := range note {
@@ -81,13 +82,4 @@ func (gm *GameManager) TurnInRansomNote(note []string, player *Player) {
 		WordStore[word] = false
 	}
 	fmt.Println()
-}
-
-func convertWords(words []any) []string {
-	var data []string
-	for _, w := range words {
-		data = append(data, fmt.Sprintf("%v", w))
-	}
-
-	return data
 }

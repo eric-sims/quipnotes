@@ -9,9 +9,10 @@ import (
 )
 
 type Message struct {
-	Command string   `json:"command"`
-	Words   []string `json:"words"`
-	Count   *int     `json:"count,omitempty"`
+	Command  string   `json:"command"`
+	Words    []string `json:"words"`
+	Count    *int     `json:"count,omitempty"`
+	PlayerId string   `json:"playerId"`
 }
 
 var upgrader = websocket.Upgrader{
@@ -28,33 +29,28 @@ func HandleConnections(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var player *Player
-	playerID := r.URL.Query().Get("playerID")
-	player, ok := Game.players[playerID]
-	if !ok {
-		player = &Player{
-			ID:   playerID,
-			Conn: conn,
-		}
-	} else {
-		player.Conn = conn
-	}
-
-	Game.AddPlayer(player)
-	defer Game.RemovePlayer(playerID)
-
 	// Process incoming messages in a loop
 	for {
 		var message Message
 		_, receivedBytes, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("Could not read message")
-			continue
+			log.Println("error, closing connection:", err)
+			break
 		}
 
 		if err := json.Unmarshal(receivedBytes, &message); err != nil {
 			log.Println("Could not unmarshal message")
 			continue
+		}
+
+		playerID := message.PlayerId
+		player, ok := Game.players[playerID]
+		if !ok {
+			player = &Player{
+				ID: playerID,
+			}
+			Game.AddPlayer(player)
+			defer Game.RemovePlayer(playerID)
 		}
 
 		// Check for "command" field to determine action type
@@ -63,6 +59,7 @@ func HandleConnections(w http.ResponseWriter, r *http.Request) {
 			count := message.Count
 			if count != nil {
 				Game.DrawWordsFromList(*count, player)
+				log.Printf("Player's new word list: %+v\n", player.wordsDrawn)
 			} else {
 				log.Println("Could not draw words!")
 			}
@@ -84,10 +81,10 @@ func HandleConnections(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Println(err)
 		}
-		err = player.Conn.WriteMessage(websocket.TextMessage, wdMsg)
+
+		err = conn.WriteMessage(websocket.TextMessage, wdMsg)
 		if err != nil {
 			log.Println(err)
-			log.Fatal()
 		}
 	}
 }
