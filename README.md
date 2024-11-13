@@ -6,7 +6,7 @@ this game is to buy the original and use the prompt cards located there.
 ## The Problem
 
 My family loves the game ["Quiplash" by Jackbox Games](https://www.jackboxgames.com/games/quiplash) because it is easy 
-to play. Also, we can enjoy it from the comfort of our living room! We've recently discovered Ransom Notes and also 
+to play. Also, we can enjoy it from the comfort of our living room! We've recently discovered "Ransom Notes" and also 
 love it! But we wanted to enjoy the same level of convenience that "Quiplash" offers. Therefore, I thought of putting 
 together my skills to make this!
 
