@@ -19,7 +19,7 @@ cp .env.example .env
 ```
 2. Fill in the actual values in the `.env` file.
 
-### Populate a words.csv file
+### Populate a `words.csv` file
 The "Ransom Notes" games words are proprietary information. Please buy a copy and index those words (this only took 
 me 15 minutes with all the tiles still in sheets). Or, feel free to use whatever word list you would like!
 
