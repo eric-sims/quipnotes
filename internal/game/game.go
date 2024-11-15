@@ -113,8 +113,8 @@ func (gm *Manager) TurnInRansomNote(note []string, id PlayerId) error {
 		return fmt.Errorf("player %s not found", id)
 	}
 
-	log.Println("RECEIVED NOTE:")
-	// TODO: Handle Ransom Note logic
+	fmt.Println("RECEIVED NOTE:")
+	// Verification Loop
 	for _, word := range note {
 		if len(strings.Split(word, "|")) < 2 {
 			log.Println("Found word with wrong format")
@@ -125,11 +125,15 @@ func (gm *Manager) TurnInRansomNote(note []string, id PlayerId) error {
 			return fmt.Errorf("word %s not part of your word pile", word)
 		}
 
-		log.Printf(strings.Split(word, "|")[1] + " ")
+		fmt.Printf(strings.Split(word, "|")[1] + " ")
+	}
+	fmt.Println()
 
+	// Disassociation from playerId loop
+	for _, word := range note {
 		gm.words[word] = ""
 	}
-	log.Println()
+
 	return nil
 }
 

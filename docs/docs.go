@@ -104,7 +104,7 @@ const docTemplate = `{
                 "summary": "Gets Drawn Tiles",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "player id",
                         "name": "id",
                         "in": "path",
@@ -176,7 +176,7 @@ const docTemplate = `{
                 "summary": "Deletes a player",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "player id",
                         "name": "id",
                         "in": "path",

@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 
+	"eric-sims/quipnotes/docs"
 	"eric-sims/quipnotes/internal/game"
 
 	"github.com/gin-gonic/gin"
@@ -42,6 +43,7 @@ func main() {
 	r.POST("/game/draw", game.DrawTiles)
 	r.POST("/game/submit", game.SubmitNote)
 
+	docs.SwaggerInfo.BasePath = ""
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	log.Println("Starting server...")

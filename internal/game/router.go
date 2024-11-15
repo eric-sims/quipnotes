@@ -50,7 +50,7 @@ func DrawTiles(c *gin.Context) {
 //	@Description	Gets all the tiles that are drawn by the player.
 //	@Router			/player/:id/tiles [get]
 //	@Produce		json
-//	@Param			id	path		int	true	"player id"
+//	@Param			id	path		string	true	"player id"
 //	@Failure		400	{object}	ErrorResponse
 //	@Failure		500	{object}	ErrorResponse
 //	@Success		200	{object}	WordsResponse
@@ -130,7 +130,7 @@ func AddPlayer(c *gin.Context) {
 //	@Summary		Deletes a player
 //	@Description	Deletes a player from the game. The playerId must exist.
 //	@Router			/players/:id [delete]
-//	@Param			id	path		int	true	"player id"
+//	@Param			id	path		string	true	"player id"
 //	@Failure		400	{object}	ErrorResponse
 //	@Failure		500	{object}	ErrorResponse
 //	@Success		200

@@ -12,7 +12,7 @@ we started playing "Ransom Notes" which is also loads of fun! However, "Ransom N
 to play because it requires sitting around a table or hard surface. If you don't do this, you'll risk 
 losing the _tiny_ word tiles that are crucial for this game.
 
-Therefore I started this project, which aims to make "Ransom Notes" as easy to play as any other JackBox-like
+Therefore, I started this project! This aims to make "Ransom Notes" as easy to play as any other JackBox-like
 games.
 
 ## How to start

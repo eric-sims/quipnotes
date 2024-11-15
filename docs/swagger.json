@@ -97,7 +97,7 @@
                 "summary": "Gets Drawn Tiles",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "player id",
                         "name": "id",
                         "in": "path",
@@ -169,7 +169,7 @@
                 "summary": "Deletes a player",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "player id",
                         "name": "id",
                         "in": "path",
