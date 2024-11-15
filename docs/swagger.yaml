@@ -1,0 +1,164 @@
+definitions:
+  game.AddPlayerRequest:
+    properties:
+      id:
+        type: string
+    type: object
+  game.DrawTilesRequest:
+    properties:
+      count:
+        type: integer
+      id:
+        type: string
+    type: object
+  game.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  game.SubmitNoteRequest:
+    properties:
+      id:
+        type: string
+      note:
+        items:
+          type: string
+        type: array
+    type: object
+  game.WordsResponse:
+    properties:
+      words:
+        items:
+          type: string
+        type: array
+    type: object
+host: localhost:8081
+info:
+  contact: {}
+  description: This handles the game logic and communication
+  title: quipNotes Server
+  version: "1.0"
+paths:
+  /game/draw:
+    post:
+      consumes:
+      - application/json
+      description: Draws Tiles (words) for a given player and a given count
+      parameters:
+      - description: tells how many tiles to draw
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/game.DrawTilesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/game.WordsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+      summary: Draws Tiles
+  /game/submit:
+    post:
+      consumes:
+      - application/json
+      description: Send a string array to turn in your words for the game.
+      parameters:
+      - description: contains the note
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/game.SubmitNoteRequest'
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+      summary: Turn in Note
+  /player/:id/tiles:
+    get:
+      description: Gets all the tiles that are drawn by the player.
+      parameters:
+      - description: player id
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/game.WordsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+      summary: Gets Drawn Tiles
+  /players:
+    post:
+      consumes:
+      - application/json
+      description: Adds a player to the game. The playerId must be unique.
+      parameters:
+      - description: contains the player id
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/game.AddPlayerRequest'
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+      summary: Adds a player to the game
+  /players/:id:
+    delete:
+      description: Deletes a player from the game. The playerId must exist.
+      parameters:
+      - description: player id
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+      summary: Deletes a player
+swagger: "2.0"
