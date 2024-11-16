@@ -40,6 +40,7 @@ func DrawTiles(c *gin.Context) {
 	words, err := Game.DrawWordsFromList(request.Count, request.PlayerId)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
 	}
 
 	c.JSON(http.StatusOK, WordsResponse{words})
@@ -48,7 +49,7 @@ func DrawTiles(c *gin.Context) {
 // GetTiles godoc
 //	@Summary		Gets Drawn Tiles
 //	@Description	Gets all the tiles that are drawn by the player.
-//	@Router			/player/:id/tiles [get]
+//	@Router			/players/:id/tiles [get]
 //	@Produce		json
 //	@Param			id	path		string	true	"player id"
 //	@Failure		400	{object}	ErrorResponse
@@ -58,11 +59,13 @@ func GetTiles(c *gin.Context) {
 	id := c.Param("id")
 	if len(id) == 0 || strings.TrimSpace(id) == "" {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "id required"})
+		return
 	}
 
 	words, err := Game.GetWords(PlayerId(id))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
 	}
 
 	c.JSON(http.StatusOK, WordsResponse{words})
@@ -98,7 +101,7 @@ func SubmitNote(c *gin.Context) {
 }
 
 type AddPlayerRequest struct {
-	PlayerId PlayerId `json:"id"`
+	PlayerId string `json:"id"`
 }
 
 // AddPlayer godoc
@@ -115,9 +118,10 @@ func AddPlayer(c *gin.Context) {
 	if c.Bind(&p) == nil {
 		if p.PlayerId == "" {
 			c.JSON(http.StatusBadRequest, ErrorResponse{Error: "playerId required"})
+			return
 		}
 
-		if err := Game.AddPlayer(p.PlayerId); err != nil {
+		if err := Game.AddPlayer(PlayerId(p.PlayerId)); err != nil {
 			c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 			return
 		}
@@ -138,9 +142,11 @@ func DeletePlayer(c *gin.Context) {
 	id := c.Param("id")
 	if len(id) == 0 || strings.TrimSpace(id) == "" || strings.TrimSpace(id) == "" {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "id required"})
+		return
 	}
 	if err := Game.RemovePlayer(PlayerId(id)); err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
 	}
 
 	c.Status(http.StatusOK)
