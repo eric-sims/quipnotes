@@ -43,7 +43,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: Draws Tiles (words) for a given player and a given count
+      description: Draws Tiles (wordTiles) for a given player and a given count
       parameters:
       - description: tells how many tiles to draw
         in: body
@@ -71,7 +71,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: Send a string array to turn in your words for the game.
+      description: Send a string array to turn in your wordTiles for the game.
       parameters:
       - description: contains the note
         in: body
@@ -91,31 +91,23 @@ paths:
           schema:
             $ref: '#/definitions/game.ErrorResponse'
       summary: Turn in Note
-  /player/:id/tiles:
+  /game/submitted-notes:
+    delete:
+      description: Deletes the submitted notes
+      responses:
+        "200":
+          description: OK
+      summary: Deletes the submitted notes
     get:
-      description: Gets all the tiles that are drawn by the player.
-      parameters:
-      - description: player id
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
+      description: Returns a list of strings that are the submitted notes
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/game.WordsResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/game.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/game.ErrorResponse'
-      summary: Gets Drawn Tiles
+            items:
+              type: string
+            type: array
+      summary: Returns the submitted notes
   /players:
     post:
       consumes:
@@ -161,4 +153,29 @@ paths:
           schema:
             $ref: '#/definitions/game.ErrorResponse'
       summary: Deletes a player
+  /players/:id/tiles:
+    get:
+      description: Gets all the tiles that are drawn by the player.
+      parameters:
+      - description: player id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/game.WordsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+      summary: Gets Drawn Tiles
 swagger: "2.0"

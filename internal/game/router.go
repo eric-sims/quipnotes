@@ -22,7 +22,7 @@ type WordsResponse struct {
 
 // DrawTiles godoc
 //	@Summary		Draws Tiles
-//	@Description	Draws Tiles (words) for a given player and a given count
+//	@Description	Draws Tiles (wordTiles) for a given player and a given count
 //	@Router			/game/draw [post]
 //	@Accept			json
 //	@Produce		json
@@ -37,7 +37,7 @@ func DrawTiles(c *gin.Context) {
 		return
 	}
 
-	words, err := Game.DrawWordsFromList(request.Count, request.PlayerId)
+	words, err := Game.DrawWordTiles(request.Count, request.PlayerId)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return
@@ -62,7 +62,7 @@ func GetTiles(c *gin.Context) {
 		return
 	}
 
-	words, err := Game.GetWords(PlayerId(id))
+	words, err := Game.GetDrawnWordTiles(PlayerId(id))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return
@@ -78,7 +78,7 @@ type SubmitNoteRequest struct {
 
 // SubmitNote godoc
 //	@Summary		Turn in Note
-//	@Description	Send a string array to turn in your words for the game.
+//	@Description	Send a string array to turn in your wordTiles for the game.
 //	@Router			/game/submit [post]
 //	@Accept			json
 //	@Param			request	body		game.SubmitNoteRequest	true	"contains the note"
@@ -92,7 +92,7 @@ func SubmitNote(c *gin.Context) {
 		return
 	}
 
-	if err := Game.TurnInRansomNote(request.Note, request.PlayerId); err != nil {
+	if err := Game.Submit(request.Note, request.PlayerId); err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return
 	}
@@ -150,4 +150,22 @@ func DeletePlayer(c *gin.Context) {
 	}
 
 	c.Status(http.StatusOK)
+}
+
+// GetSubmittedNotes godoc
+//	@Summary		Returns the submitted notes
+//	@Description	Returns a list of strings that are the submitted notes
+//	@Router			/game/submitted-notes [get]
+//	@Success		200	{object}	[]string
+func GetSubmittedNotes(c *gin.Context) {
+	c.JSON(200, gin.H{"notes": Game.GetSubmittedNotes()})
+}
+
+// DeleteSubmittedNotes godoc
+//	@Summary		Deletes the submitted notes
+//	@Description	Deletes the submitted notes
+//	@Router			/game/submitted-notes [delete]
+//	@Success		200
+func DeleteSubmittedNotes(c *gin.Context) {
+	c.JSON(200, gin.H{"notes": Game.GetSubmittedNotes()})
 }

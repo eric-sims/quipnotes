@@ -8,7 +8,7 @@ import (
 	"strconv"
 )
 
-// LoadWordsFromCSV - Function to load words from a CSV file into the global Words structure
+// LoadWordsFromCSV - Function to load wordTiles from a CSV file into the global Words structure
 func LoadWordsFromCSV(filepath string) error {
 	// Open the CSV file
 	file, err := os.Open(filepath)
@@ -28,9 +28,9 @@ func LoadWordsFromCSV(filepath string) error {
 
 	// Iterate through each record, encoding "word|type" and storing in the map
 	for i, record := range records {
-		Game.words[fmt.Sprintf("%s|%s", strconv.Itoa(i), record[0])] = ""
+		Game.wordTiles[fmt.Sprintf("%s|%s", strconv.Itoa(i), record[0])] = ""
 	}
 
-	log.Printf("Loaded %d words.", len(Game.words))
+	log.Printf("Loaded %d wordTiles.", len(Game.wordTiles))
 	return nil
 }

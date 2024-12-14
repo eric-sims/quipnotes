@@ -36,8 +36,8 @@ func main() {
 	r := gin.Default()
 	// CORS setup - allow only specific origins
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:8080", "http://192.168.1.41:8080"}, // Your frontend's URL
-		AllowMethods:     []string{"GET", "POST", "DELETE"},                             // Allowed HTTP methods
+		AllowOrigins:     []string{"*"},                     // Your frontend's URL
+		AllowMethods:     []string{"GET", "POST", "DELETE"}, // Allowed HTTP methods
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
@@ -49,6 +49,9 @@ func main() {
 
 	r.POST("/game/draw", game.DrawTiles)
 	r.POST("/game/submit", game.SubmitNote)
+
+	r.GET("/game/submitted-notes", game.GetSubmittedNotes)
+	r.DELETE("/game/submitted-notes", game.DeleteSubmittedNotes)
 
 	docs.SwaggerInfo.BasePath = ""
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

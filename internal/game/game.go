@@ -14,17 +14,18 @@ var Game *Manager
 
 type PlayerId string
 type Manager struct {
-	players []PlayerId
-	words   map[string]PlayerId
-	mux     sync.RWMutex
+	players        []PlayerId
+	wordTiles      map[string]PlayerId
+	submittedNotes []string
+	mux            sync.RWMutex
 }
 
 // NewGameManager creates a new game manager instance
 func NewGameManager() *Manager {
 	return &Manager{
-		players: make([]PlayerId, 0),
-		words:   make(map[string]PlayerId),
-		mux:     sync.RWMutex{},
+		players:   make([]PlayerId, 0),
+		wordTiles: make(map[string]PlayerId),
+		mux:       sync.RWMutex{},
 	}
 }
 
@@ -49,9 +50,9 @@ func (gm *Manager) RemovePlayer(id PlayerId) error {
 	gm.mux.Lock()
 	defer gm.mux.Unlock()
 
-	for word, playerId := range gm.words {
+	for word, playerId := range gm.wordTiles {
 		if playerId == id {
-			gm.words[word] = ""
+			gm.wordTiles[word] = ""
 		}
 	}
 
@@ -65,49 +66,50 @@ func (gm *Manager) RemovePlayer(id PlayerId) error {
 	return nil
 }
 
-func (gm *Manager) DrawWordsFromList(n int, id PlayerId) ([]string, error) {
+func (gm *Manager) DrawWordTiles(n int, id PlayerId) ([]string, error) {
 	gm.mux.Lock()
 
-	if n <= 0 || n > len(Game.words) {
-		return nil, fmt.Errorf("invalid number of words requested: %d", n)
+	if n <= 0 || n > len(Game.wordTiles) {
+		return nil, fmt.Errorf("invalid number of wordTiles requested: %d", n)
 	}
 
 	// Collect keys that haven't been set to true
 	availableWords := make([]string, 0)
-	for word, playerId := range Game.words {
+	for word, playerId := range Game.wordTiles {
 		if playerId == "" {
 			availableWords = append(availableWords, word)
 		}
 	}
 
-	// Check if there are enough words available
+	// Check if there are enough wordTiles available
 	if len(availableWords) < n {
-		return nil, fmt.Errorf("not enough words available, only %d left", len(availableWords))
+		return nil, fmt.Errorf("not enough wordTiles available, only %d left", len(availableWords))
 	}
 
-	// Shuffle the available words
+	// Shuffle the available wordTiles
 	rand.Shuffle(len(availableWords), func(i, j int) {
 		availableWords[i], availableWords[j] = availableWords[j], availableWords[i]
 	})
 
-	// Select the first `n` words from the shuffled list
+	// Select the first `n` wordTiles from the shuffled list
 	selectedWords := availableWords[:n]
 
-	// Mark the selected words as retrieved in Game.words
+	// Mark the selected wordTiles as retrieved in Game.wordTiles
 	for _, word := range selectedWords {
-		Game.words[word] = id
+		Game.wordTiles[word] = id
 	}
 
 	gm.mux.Unlock()
 	// return the whole list so that the client can remain stateless
-	return gm.GetWords(id)
+	return gm.GetDrawnWordTiles(id)
 }
 
-// TurnInRansomNote - reads off the ransom note and puts the tiles back into the WordStore
-func (gm *Manager) TurnInRansomNote(note []string, id PlayerId) error {
+// Submit - reads off the ransom note and puts the tiles back into the WordStore
+func (gm *Manager) Submit(note []string, id PlayerId) error {
 	gm.mux.Lock()
 	defer gm.mux.Unlock()
 
+	sb := strings.Builder{}
 	if !slices.Contains(gm.players, id) {
 		log.Printf("Player %s not found in game", id)
 		return fmt.Errorf("player %s not found", id)
@@ -121,23 +123,34 @@ func (gm *Manager) TurnInRansomNote(note []string, id PlayerId) error {
 			return fmt.Errorf("word %s not found in wrong format", word)
 		}
 
-		if gm.words[word] != id {
+		if gm.wordTiles[word] != id {
 			return fmt.Errorf("word %s not part of your word pile", word)
 		}
 
-		fmt.Printf(strings.Split(word, "|")[1] + " ")
+		legibleWord := strings.Split(word, "|")[1] + " "
+		fmt.Printf(legibleWord)
+		sb.WriteString(legibleWord)
 	}
 	fmt.Println()
+	sb.WriteString("\n")
 
-	// Disassociation from playerId loop
-	for _, word := range note {
-		gm.words[word] = ""
+	if strings.TrimSpace(sb.String()) == "" {
+		return fmt.Errorf("no wordTiles found")
 	}
+
+	// Need to loop through a second time because if it errors out in the first loop, we want the
+	// player to keep his/her wordTiles
+	for _, word := range note {
+		gm.wordTiles[word] = ""
+	}
+
+	// Add to submittedNotes
+	gm.submittedNotes = append(gm.submittedNotes, sb.String())
 
 	return nil
 }
 
-func (gm *Manager) GetWords(id PlayerId) ([]string, error) {
+func (gm *Manager) GetDrawnWordTiles(id PlayerId) ([]string, error) {
 	gm.mux.Lock()
 	defer gm.mux.Unlock()
 
@@ -146,10 +159,44 @@ func (gm *Manager) GetWords(id PlayerId) ([]string, error) {
 	}
 
 	words := make([]string, 0)
-	for word, playerId := range gm.words {
+	for word, playerId := range gm.wordTiles {
 		if playerId == id {
 			words = append(words, word)
 		}
 	}
 	return words, nil
+}
+
+func (gm *Manager) GetSubmitted() []string {
+	gm.mux.Lock()
+	defer gm.mux.Unlock()
+
+	return gm.submittedNotes
+}
+
+func (gm *Manager) DeleteSubmitted() {
+	gm.mux.Lock()
+	defer gm.mux.Unlock()
+
+	gm.submittedNotes = make([]string, 0)
+}
+
+func (gm *Manager) GetPlayers() []PlayerId {
+	gm.mux.Lock()
+	defer gm.mux.Unlock()
+	return gm.players
+}
+
+func (gm *Manager) GetSubmittedNotes() []string {
+	gm.mux.Lock()
+	defer gm.mux.Unlock()
+
+	return gm.submittedNotes
+}
+
+func (gm *Manager) ClearSubmitted() {
+	gm.mux.Lock()
+	defer gm.mux.Unlock()
+
+	gm.submittedNotes = make([]string, 0)
 }

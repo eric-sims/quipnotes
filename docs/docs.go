@@ -17,7 +17,7 @@ const docTemplate = `{
     "paths": {
         "/game/draw": {
             "post": {
-                "description": "Draws Tiles (words) for a given player and a given count",
+                "description": "Draws Tiles (wordTiles) for a given player and a given count",
                 "consumes": [
                     "application/json"
                 ],
@@ -60,7 +60,7 @@ const docTemplate = `{
         },
         "/game/submit": {
             "post": {
-                "description": "Send a string array to turn in your words for the game.",
+                "description": "Send a string array to turn in your wordTiles for the game.",
                 "consumes": [
                     "application/json"
                 ],
@@ -95,40 +95,28 @@ const docTemplate = `{
                 }
             }
         },
-        "/player/:id/tiles": {
+        "/game/submitted-notes": {
             "get": {
-                "description": "Gets all the tiles that are drawn by the player.",
-                "produces": [
-                    "application/json"
-                ],
-                "summary": "Gets Drawn Tiles",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "player id",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
+                "description": "Returns a list of strings that are the submitted notes",
+                "summary": "Returns the submitted notes",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/game.WordsResponse"
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
                         }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/game.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/game.ErrorResponse"
-                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Deletes the submitted notes",
+                "summary": "Deletes the submitted notes",
+                "responses": {
+                    "200": {
+                        "description": "OK"
                     }
                 }
             }
@@ -186,6 +174,44 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/players/:id/tiles": {
+            "get": {
+                "description": "Gets all the tiles that are drawn by the player.",
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Gets Drawn Tiles",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "player id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/game.WordsResponse"
+                        }
                     },
                     "400": {
                         "description": "Bad Request",
