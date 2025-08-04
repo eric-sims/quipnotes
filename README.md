@@ -1,7 +1,7 @@
 # Quipnotes
 
 This project was inspired by a combination of two popular games: ["Ransom Notes" by Very Special Games](https://www.veryspecialgames.com/products/ransom-notes-the-ridiculous-word-magnet-game) 
-and ["Quiplash" by Jackbox Games](https://www.jackboxgames.com/games/quiplash). 
+and ["Quiplash" by Jackbox Games](https://www.jackboxgames.com/games/quiplash). Therefore, the combination of these two game names birthed a new name: Quipnotes!
 
 The best way to experience this game is to buy "Ransom Notes" and use the prompt cards located there. 
 
