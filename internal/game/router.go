@@ -167,5 +167,6 @@ func GetSubmittedNotes(c *gin.Context) {
 //	@Router			/game/submitted-notes [delete]
 //	@Success		200
 func DeleteSubmittedNotes(c *gin.Context) {
-	c.JSON(200, gin.H{"notes": Game.GetSubmittedNotes()})
+	Game.ClearSubmitted()
+	c.Status(http.StatusOK)
 }
