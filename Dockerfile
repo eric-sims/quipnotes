@@ -15,5 +15,5 @@ COPY --from=build /app/.env .env
 COPY --from=build /app/data/words.csv words.csv
 COPY --from=build /app/static/index.html static/index.html
 
-EXPOSE 8080
+EXPOSE 8081
 CMD ["./quipnotes"]

@@ -60,7 +60,7 @@ func (gm *Manager) RemovePlayer(id PlayerId) error {
 	if index == -1 {
 		return errors.New("cannot remove player. id does not exist")
 	}
-	slices.Delete(gm.players, index, index+1)
+	gm.players = slices.Delete(gm.players, index, index+1)
 
 	log.Printf("Removed player: %+v\n", id)
 	return nil
@@ -69,13 +69,13 @@ func (gm *Manager) RemovePlayer(id PlayerId) error {
 func (gm *Manager) DrawWordTiles(n int, id PlayerId) ([]string, error) {
 	gm.mux.Lock()
 
-	if n <= 0 || n > len(Game.wordTiles) {
+	if n <= 0 || n > len(gm.wordTiles) {
 		return nil, fmt.Errorf("invalid number of wordTiles requested: %d", n)
 	}
 
 	// Collect keys that haven't been set to true
 	availableWords := make([]string, 0)
-	for word, playerId := range Game.wordTiles {
+	for word, playerId := range gm.wordTiles {
 		if playerId == "" {
 			availableWords = append(availableWords, word)
 		}
@@ -94,9 +94,9 @@ func (gm *Manager) DrawWordTiles(n int, id PlayerId) ([]string, error) {
 	// Select the first `n` wordTiles from the shuffled list
 	selectedWords := availableWords[:n]
 
-	// Mark the selected wordTiles as retrieved in Game.wordTiles
+	// Mark the selected wordTiles as retrieved in gm.wordTiles
 	for _, word := range selectedWords {
-		Game.wordTiles[word] = id
+		gm.wordTiles[word] = id
 	}
 
 	gm.mux.Unlock()
