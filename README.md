@@ -31,10 +31,6 @@ me 15 minutes with all the tiles still in sheets). Or, feel free to use whatever
 1. Put the words list in a csv file in one column. No title.
 2. Save it somewhere and update the `WORDS_FILE_PATH` environment variable in your .env file.
 
-## Clients
-quipNotes serves a static HTML page that communicates with the server. Please fill in the `HTML_DIR_PATH` in your
-.env file. This gives you the option to make your own client or expand upon mine. :) 
-
 ## TODO
 - [ ] Finish Client
 - [ ] Create a user-friendly interaction for reading the ransom notes (another client?)

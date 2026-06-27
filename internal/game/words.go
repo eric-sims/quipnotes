@@ -8,12 +8,14 @@ import (
 	"strconv"
 )
 
-// LoadWordsFromCSV - Function to load wordTiles from a CSV file into the global Words structure
-func LoadWordsFromCSV(filepath string) error {
+// LoadWordsFromCSV reads a single-column, header-less CSV and returns the base
+// list of tile keys ("<rowIndex>|<word>"). The Registry holds these and copies
+// them into each new game's pool, so every game starts with the full set.
+func LoadWordsFromCSV(filepath string) ([]string, error) {
 	// Open the CSV file
 	file, err := os.Open(filepath)
 	if err != nil {
-		return fmt.Errorf("could not open file: %v", err)
+		return nil, fmt.Errorf("could not open file: %v", err)
 	}
 	defer file.Close()
 
@@ -23,14 +25,16 @@ func LoadWordsFromCSV(filepath string) error {
 	// Read all rows
 	records, err := reader.ReadAll()
 	if err != nil {
-		return fmt.Errorf("could not read CSV: %v", err)
+		return nil, fmt.Errorf("could not read CSV: %v", err)
 	}
 
-	// Iterate through each record, encoding "word|type" and storing in the map
+	// Encode each row as a "<rowIndex>|<word>" tile key. The index prefix keeps
+	// duplicate words distinct.
+	tileKeys := make([]string, 0, len(records))
 	for i, record := range records {
-		Game.wordTiles[fmt.Sprintf("%s|%s", strconv.Itoa(i), record[0])] = ""
+		tileKeys = append(tileKeys, fmt.Sprintf("%s|%s", strconv.Itoa(i), record[0]))
 	}
 
-	log.Printf("Loaded %d wordTiles.", len(Game.wordTiles))
-	return nil
+	log.Printf("Loaded %d wordTiles.", len(tileKeys))
+	return tileKeys, nil
 }

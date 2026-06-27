@@ -10,23 +10,105 @@ import (
 	"sync"
 )
 
-var Game *Manager
+// Games is the registry of all live games, keyed by 4-digit code. It replaces
+// the former single global game.
+var Games *Registry
 
 type PlayerId string
+
+// Manager holds the state for a single game. Many games run concurrently, each
+// identified by its code and held in the Registry.
 type Manager struct {
+	code           string
 	players        []PlayerId
 	wordTiles      map[string]PlayerId
 	submittedNotes []string
 	mux            sync.RWMutex
 }
 
-// NewGameManager creates a new game manager instance
-func NewGameManager() *Manager {
+// newGame builds a fresh game seeded with its own copy of the tile pool (every
+// tile available). tileKeys are the "<idx>|<word>" keys loaded once from CSV.
+func newGame(code string, tileKeys []string) *Manager {
+	wordTiles := make(map[string]PlayerId, len(tileKeys))
+	for _, key := range tileKeys {
+		wordTiles[key] = ""
+	}
 	return &Manager{
+		code:      code,
 		players:   make([]PlayerId, 0),
-		wordTiles: make(map[string]PlayerId),
+		wordTiles: wordTiles,
 		mux:       sync.RWMutex{},
 	}
+}
+
+// Code returns the game's 4-digit code.
+func (gm *Manager) Code() string {
+	return gm.code
+}
+
+// Registry owns the collection of live games and the shared base tile list.
+type Registry struct {
+	games    map[string]*Manager
+	tileKeys []string
+	mux      sync.RWMutex
+}
+
+// codeGenAttempts caps how many times we retry to find a free code before
+// giving up (effectively "the registry is full").
+const codeGenAttempts = 100
+
+// NewRegistry creates an empty registry that seeds every new game from tileKeys.
+func NewRegistry(tileKeys []string) *Registry {
+	return &Registry{
+		games:    make(map[string]*Manager),
+		tileKeys: tileKeys,
+		mux:      sync.RWMutex{},
+	}
+}
+
+// CreateGame allocates a new game under a unique 4-digit code and returns it.
+// No players are added at creation — players join later with the code.
+func (r *Registry) CreateGame() (*Manager, error) {
+	r.mux.Lock()
+	defer r.mux.Unlock()
+
+	for i := 0; i < codeGenAttempts; i++ {
+		code := fmt.Sprintf("%04d", rand.IntN(10000))
+		if _, exists := r.games[code]; exists {
+			continue
+		}
+		game := newGame(code, r.tileKeys)
+		r.games[code] = game
+		log.Printf("Created game: %s", code)
+		return game, nil
+	}
+	return nil, errors.New("could not allocate a free game code")
+}
+
+// GetGame looks up a live game by code.
+func (r *Registry) GetGame(code string) (*Manager, error) {
+	r.mux.RLock()
+	defer r.mux.RUnlock()
+
+	game, ok := r.games[code]
+	if !ok {
+		return nil, fmt.Errorf("game %s not found", code)
+	}
+	return game, nil
+}
+
+// CloseGame removes a game from the registry. No auth: in practice only the
+// manager (host) calls this.
+func (r *Registry) CloseGame(code string) error {
+	r.mux.Lock()
+	defer r.mux.Unlock()
+
+	if _, ok := r.games[code]; !ok {
+		return fmt.Errorf("game %s not found", code)
+	}
+	delete(r.games, code)
+	log.Printf("Closed game: %s", code)
+	return nil
 }
 
 func (gm *Manager) AddPlayer(id PlayerId) error {
@@ -165,20 +247,6 @@ func (gm *Manager) GetDrawnWordTiles(id PlayerId) ([]string, error) {
 		}
 	}
 	return words, nil
-}
-
-func (gm *Manager) GetSubmitted() []string {
-	gm.mux.Lock()
-	defer gm.mux.Unlock()
-
-	return gm.submittedNotes
-}
-
-func (gm *Manager) DeleteSubmitted() {
-	gm.mux.Lock()
-	defer gm.mux.Unlock()
-
-	gm.submittedNotes = make([]string, 0)
 }
 
 func (gm *Manager) GetPlayers() []PlayerId {

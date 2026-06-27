@@ -4,6 +4,11 @@ definitions:
       id:
         type: string
     type: object
+  game.CreateGameResponse:
+    properties:
+      code:
+        type: string
+    type: object
   game.DrawTilesRequest:
     properties:
       count:
@@ -15,6 +20,15 @@ definitions:
     properties:
       error:
         type: string
+    type: object
+  game.GameInfoResponse:
+    properties:
+      code:
+        type: string
+      players:
+        items:
+          type: string
+        type: array
     type: object
   game.SubmitNoteRequest:
     properties:
@@ -39,12 +53,70 @@ info:
   title: quipNotes Server
   version: "1.0"
 paths:
-  /game/draw:
+  /games:
+    post:
+      description: Creates a new game and returns its unique 4-digit code. Driven
+        by the manager (host).
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/game.CreateGameResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+      summary: Starts a new game
+  /games/{code}:
+    delete:
+      description: Removes a game from the server. Driven by the manager (host).
+      parameters:
+      - description: game code
+        in: path
+        name: code
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+      summary: Ends a game
+    get:
+      description: Returns a game's code and current players. Used to validate a join.
+      parameters:
+      - description: game code
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/game.GameInfoResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+      summary: Game info
+  /games/{code}/draw:
     post:
       consumes:
       - application/json
       description: Draws Tiles (wordTiles) for a given player and a given count
       parameters:
+      - description: game code
+        in: path
+        name: code
+        required: true
+        type: string
       - description: tells how many tiles to draw
         in: body
         name: request
@@ -62,58 +134,27 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/game.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
             $ref: '#/definitions/game.ErrorResponse'
       summary: Draws Tiles
-  /game/submit:
+  /games/{code}/players:
     post:
       consumes:
       - application/json
-      description: Send a string array to turn in your wordTiles for the game.
+      description: Adds a player to a game. The playerId must be unique within the
+        game.
       parameters:
-      - description: contains the note
-        in: body
-        name: request
+      - description: game code
+        in: path
+        name: code
         required: true
-        schema:
-          $ref: '#/definitions/game.SubmitNoteRequest'
-      responses:
-        "200":
-          description: OK
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/game.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/game.ErrorResponse'
-      summary: Turn in Note
-  /game/submitted-notes:
-    delete:
-      description: Deletes the submitted notes
-      responses:
-        "200":
-          description: OK
-      summary: Deletes the submitted notes
-    get:
-      description: Returns a list of strings that are the submitted notes
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              type: string
-            type: array
-      summary: Returns the submitted notes
-  /players:
-    post:
-      consumes:
-      - application/json
-      description: Adds a player to the game. The playerId must be unique.
-      parameters:
+        type: string
       - description: contains the player id
         in: body
         name: request
@@ -127,15 +168,24 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/game.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
             $ref: '#/definitions/game.ErrorResponse'
-      summary: Adds a player to the game
-  /players/:id:
+      summary: Joins a game
+  /games/{code}/players/{id}:
     delete:
-      description: Deletes a player from the game. The playerId must exist.
+      description: Removes a player from a game. The playerId must exist.
       parameters:
+      - description: game code
+        in: path
+        name: code
+        required: true
+        type: string
       - description: player id
         in: path
         name: id
@@ -148,15 +198,24 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/game.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
             $ref: '#/definitions/game.ErrorResponse'
-      summary: Deletes a player
-  /players/:id/tiles:
+      summary: Leaves a game
+  /games/{code}/players/{id}/tiles:
     get:
       description: Gets all the tiles that are drawn by the player.
       parameters:
+      - description: game code
+        in: path
+        name: code
+        required: true
+        type: string
       - description: player id
         in: path
         name: id
@@ -173,9 +232,88 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/game.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
             $ref: '#/definitions/game.ErrorResponse'
       summary: Gets Drawn Tiles
+  /games/{code}/submit:
+    post:
+      consumes:
+      - application/json
+      description: Send a string array to turn in your wordTiles for the game.
+      parameters:
+      - description: game code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: contains the note
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/game.SubmitNoteRequest'
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+      summary: Turn in Note
+  /games/{code}/submitted-notes:
+    delete:
+      description: Clears the submitted notes for the game
+      parameters:
+      - description: game code
+        in: path
+        name: code
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+      summary: Deletes the submitted notes
+    get:
+      description: Returns a list of strings that are the submitted notes for the
+        game
+      parameters:
+      - description: game code
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              items:
+                type: string
+              type: array
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+      summary: Returns the submitted notes
 swagger: "2.0"
