@@ -20,8 +20,6 @@ import (
 //	@description	This handles the game logic and communication
 //	@host			localhost:8081
 func main() {
-	game.Game = game.NewGameManager()
-
 	err := godotenv.Load()
 	if err != nil {
 		panic(fmt.Sprintf("Error loading .env file: %s", err.Error()))
@@ -29,9 +27,11 @@ func main() {
 	filePath := os.Getenv("WORDS_FILE_PATH")
 
 	fmt.Println("filePath", filePath)
-	if err := game.LoadWordsFromCSV(filePath); err != nil {
+	tileKeys, err := game.LoadWordsFromCSV(filePath)
+	if err != nil {
 		panic(fmt.Sprintf("Failed to load words.csv: %s", err.Error()))
 	}
+	game.Games = game.NewRegistry(tileKeys)
 
 	r := gin.Default()
 	// CORS setup - allow only specific origins
@@ -43,15 +43,21 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	r.POST("/players", game.AddPlayer)
-	r.DELETE("/players/:id", game.DeletePlayer)
-	r.GET("/players/:id/tiles", game.GetTiles)
+	// Manager (host) endpoints: start / end a game.
+	r.POST("/games", game.CreateGame)
+	r.DELETE("/games/:code", game.CloseGame)
 
-	r.POST("/game/draw", game.DrawTiles)
-	r.POST("/game/submit", game.SubmitNote)
+	// Game-scoped player endpoints.
+	r.GET("/games/:code", game.GetGameInfo)
+	r.POST("/games/:code/players", game.AddPlayer)
+	r.DELETE("/games/:code/players/:id", game.DeletePlayer)
+	r.GET("/games/:code/players/:id/tiles", game.GetTiles)
+	r.POST("/games/:code/draw", game.DrawTiles)
+	r.POST("/games/:code/submit", game.SubmitNote)
 
-	r.GET("/game/submitted-notes", game.GetSubmittedNotes)
-	r.DELETE("/game/submitted-notes", game.DeleteSubmittedNotes)
+	// Manager (host) note board for a game.
+	r.GET("/games/:code/submitted-notes", game.GetSubmittedNotes)
+	r.DELETE("/games/:code/submitted-notes", game.DeleteSubmittedNotes)
 
 	docs.SwaggerInfo.BasePath = ""
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

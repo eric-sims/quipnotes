@@ -15,7 +15,86 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/game/draw": {
+        "/games": {
+            "post": {
+                "description": "Creates a new game and returns its unique 4-digit code. Driven by the manager (host).",
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Starts a new game",
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/game.CreateGameResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/games/{code}": {
+            "get": {
+                "description": "Returns a game's code and current players. Used to validate a join.",
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Game info",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "game code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/game.GameInfoResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Removes a game from the server. Driven by the manager (host).",
+                "summary": "Ends a game",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "game code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/games/{code}/draw": {
             "post": {
                 "description": "Draws Tiles (wordTiles) for a given player and a given count",
                 "consumes": [
@@ -26,6 +105,13 @@ const docTemplate = `{
                 ],
                 "summary": "Draws Tiles",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "game code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    },
                     {
                         "description": "tells how many tiles to draw",
                         "name": "request",
@@ -49,6 +135,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/game.ErrorResponse"
                         }
                     },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -58,77 +150,21 @@ const docTemplate = `{
                 }
             }
         },
-        "/game/submit": {
+        "/games/{code}/players": {
             "post": {
-                "description": "Send a string array to turn in your wordTiles for the game.",
+                "description": "Adds a player to a game. The playerId must be unique within the game.",
                 "consumes": [
                     "application/json"
                 ],
-                "summary": "Turn in Note",
+                "summary": "Joins a game",
                 "parameters": [
                     {
-                        "description": "contains the note",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/game.SubmitNoteRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK"
+                        "type": "string",
+                        "description": "game code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
                     },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/game.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/game.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/game/submitted-notes": {
-            "get": {
-                "description": "Returns a list of strings that are the submitted notes",
-                "summary": "Returns the submitted notes",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "description": "Deletes the submitted notes",
-                "summary": "Deletes the submitted notes",
-                "responses": {
-                    "200": {
-                        "description": "OK"
-                    }
-                }
-            }
-        },
-        "/players": {
-            "post": {
-                "description": "Adds a player to the game. The playerId must be unique.",
-                "consumes": [
-                    "application/json"
-                ],
-                "summary": "Adds a player to the game",
-                "parameters": [
                     {
                         "description": "contains the player id",
                         "name": "request",
@@ -149,6 +185,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/game.ErrorResponse"
                         }
                     },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -158,11 +200,18 @@ const docTemplate = `{
                 }
             }
         },
-        "/players/:id": {
+        "/games/{code}/players/{id}": {
             "delete": {
-                "description": "Deletes a player from the game. The playerId must exist.",
-                "summary": "Deletes a player",
+                "description": "Removes a player from a game. The playerId must exist.",
+                "summary": "Leaves a game",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "game code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    },
                     {
                         "type": "string",
                         "description": "player id",
@@ -181,6 +230,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/game.ErrorResponse"
                         }
                     },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -190,7 +245,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/players/:id/tiles": {
+        "/games/{code}/players/{id}/tiles": {
             "get": {
                 "description": "Gets all the tiles that are drawn by the player.",
                 "produces": [
@@ -198,6 +253,13 @@ const docTemplate = `{
                 ],
                 "summary": "Gets Drawn Tiles",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "game code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    },
                     {
                         "type": "string",
                         "description": "player id",
@@ -219,8 +281,126 @@ const docTemplate = `{
                             "$ref": "#/definitions/game.ErrorResponse"
                         }
                     },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/games/{code}/submit": {
+            "post": {
+                "description": "Send a string array to turn in your wordTiles for the game.",
+                "consumes": [
+                    "application/json"
+                ],
+                "summary": "Turn in Note",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "game code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "contains the note",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/game.SubmitNoteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/games/{code}/submitted-notes": {
+            "get": {
+                "description": "Returns a list of strings that are the submitted notes for the game",
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Returns the submitted notes",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "game code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Clears the submitted notes for the game",
+                "summary": "Deletes the submitted notes",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "game code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/game.ErrorResponse"
                         }
@@ -234,6 +414,14 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "id": {
+                    "type": "string"
+                }
+            }
+        },
+        "game.CreateGameResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
                     "type": "string"
                 }
             }
@@ -254,6 +442,20 @@ const docTemplate = `{
             "properties": {
                 "error": {
                     "type": "string"
+                }
+            }
+        },
+        "game.GameInfoResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "players": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
