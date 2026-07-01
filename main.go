@@ -68,7 +68,6 @@ func main() {
 
 	// Manager (host) note board for a game.
 	r.GET("/games/:code/submitted-notes", game.GetSubmittedNotes)
-	r.DELETE("/games/:code/submitted-notes", game.DeleteSubmittedNotes)
 
 	docs.SwaggerInfo.BasePath = ""
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

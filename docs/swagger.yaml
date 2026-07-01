@@ -350,22 +350,6 @@ paths:
             $ref: '#/definitions/game.ErrorResponse'
       summary: Turn in Note
   /games/{code}/submitted-notes:
-    delete:
-      description: Clears the submitted notes for the game
-      parameters:
-      - description: game code
-        in: path
-        name: code
-        required: true
-        type: string
-      responses:
-        "200":
-          description: OK
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/game.ErrorResponse'
-      summary: Deletes the submitted notes
     get:
       description: Returns a list of strings that are the submitted notes for the
         game

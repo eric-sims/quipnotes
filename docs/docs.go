@@ -481,30 +481,6 @@ const docTemplate = `{
                         }
                     }
                 }
-            },
-            "delete": {
-                "description": "Clears the submitted notes for the game",
-                "summary": "Deletes the submitted notes",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "game code",
-                        "name": "code",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK"
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/game.ErrorResponse"
-                        }
-                    }
-                }
             }
         }
     },

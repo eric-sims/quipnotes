@@ -344,19 +344,3 @@ func GetSubmittedNotes(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"notes": g.GetSubmittedNotes()})
 }
-
-// DeleteSubmittedNotes godoc
-//	@Summary		Deletes the submitted notes
-//	@Description	Clears the submitted notes for the game
-//	@Router			/games/{code}/submitted-notes [delete]
-//	@Param			code	path	string	true	"game code"
-//	@Failure		404		{object}	ErrorResponse
-//	@Success		200
-func DeleteSubmittedNotes(c *gin.Context) {
-	g, ok := resolveGame(c)
-	if !ok {
-		return
-	}
-	g.ClearSubmitted()
-	c.Status(http.StatusOK)
-}
