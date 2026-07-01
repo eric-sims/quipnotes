@@ -63,7 +63,7 @@ Player IDs only need to be unique **within a game**.
 - `POST /games/:code/rounds` — manager draws the next prompt; returns `{round, prompt}` (201)
 - `GET /games/:code/round` — current `{round, prompt}` (round 0 before any draw)
 - `GET /games/:code/events` — **WebSocket** upgrade; pushes `round_started {round,prompt}` (also a snapshot on connect), `submission {round,count,total}`, and `game_ended {}`
-- `GET /games/:code/submitted-notes` / `DELETE /games/:code/submitted-notes` — manager read/clear for the note board
+- `GET /games/:code/submitted-notes` — manager reads the note board (notes are cleared server-side by `StartRound`, so there is no manual clear route)
 
 A handler that can't find `:code` returns **404** (`resolveGame` in `router.go`). `router.go`
 holds all Gin handlers (with Swagger annotations) and the request/response structs. Pure

@@ -368,9 +368,3 @@ func (gm *Manager) GetSubmittedNotes() []string {
 	return gm.submittedNotes
 }
 
-func (gm *Manager) ClearSubmitted() {
-	gm.mux.Lock()
-	defer gm.mux.Unlock()
-
-	gm.submittedNotes = make([]string, 0)
-}
