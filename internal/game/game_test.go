@@ -1,7 +1,10 @@
 package game
 
 import (
+	"errors"
+	"fmt"
 	"regexp"
+	"slices"
 	"testing"
 )
 
@@ -10,8 +13,18 @@ func sampleTileKeys() []string {
 	return []string{"0|alpha", "1|beta", "2|gamma", "3|delta", "4|epsilon"}
 }
 
+// samplePrompts builds a small base prompt list for tests.
+func samplePrompts() []string {
+	return []string{"prompt one", "prompt two", "prompt three"}
+}
+
+// newTestRegistry wires a registry with the sample tile + prompt lists.
+func newTestRegistry() *Registry {
+	return NewRegistry(sampleTileKeys(), samplePrompts())
+}
+
 func TestCreateGameReturnsFourDigitCode(t *testing.T) {
-	r := NewRegistry(sampleTileKeys())
+	r := newTestRegistry()
 
 	g, err := r.CreateGame()
 	if err != nil {
@@ -29,7 +42,7 @@ func TestCreateGameReturnsFourDigitCode(t *testing.T) {
 }
 
 func TestCreateGameCodesAreUnique(t *testing.T) {
-	r := NewRegistry(sampleTileKeys())
+	r := newTestRegistry()
 	seen := make(map[string]bool)
 
 	for i := 0; i < 50; i++ {
@@ -45,7 +58,7 @@ func TestCreateGameCodesAreUnique(t *testing.T) {
 }
 
 func TestGamesAreIsolated(t *testing.T) {
-	r := NewRegistry(sampleTileKeys())
+	r := newTestRegistry()
 
 	gameA, _ := r.CreateGame()
 	gameB, _ := r.CreateGame()
@@ -77,14 +90,14 @@ func TestGamesAreIsolated(t *testing.T) {
 }
 
 func TestGetGameMissingCode(t *testing.T) {
-	r := NewRegistry(sampleTileKeys())
+	r := newTestRegistry()
 	if _, err := r.GetGame("9999"); err == nil {
 		t.Fatal("expected error for unknown game code, got nil")
 	}
 }
 
 func TestCloseGameRemovesIt(t *testing.T) {
-	r := NewRegistry(sampleTileKeys())
+	r := newTestRegistry()
 	g, _ := r.CreateGame()
 
 	if err := r.CloseGame(g.Code()); err != nil {
@@ -100,7 +113,7 @@ func TestCloseGameRemovesIt(t *testing.T) {
 }
 
 func TestSubmitRoundTrip(t *testing.T) {
-	r := NewRegistry(sampleTileKeys())
+	r := newTestRegistry()
 	g, _ := r.CreateGame()
 	if err := g.AddPlayer("alice"); err != nil {
 		t.Fatalf("AddPlayer: %v", err)
@@ -109,6 +122,11 @@ func TestSubmitRoundTrip(t *testing.T) {
 	drawn, err := g.DrawWordTiles(3, "alice")
 	if err != nil {
 		t.Fatalf("DrawWordTiles: %v", err)
+	}
+
+	// A note only counts against an active round.
+	if _, _, err := g.StartRound(); err != nil {
+		t.Fatalf("StartRound: %v", err)
 	}
 
 	if err := g.Submit(drawn, "alice"); err != nil {
@@ -124,5 +142,120 @@ func TestSubmitRoundTrip(t *testing.T) {
 	held, _ := g.GetDrawnWordTiles("alice")
 	if len(held) != 0 {
 		t.Fatalf("expected alice to hold 0 tiles after submit, got %d", len(held))
+	}
+}
+
+func TestSubmitRequiresActiveRound(t *testing.T) {
+	r := newTestRegistry()
+	g, _ := r.CreateGame()
+	if err := g.AddPlayer("alice"); err != nil {
+		t.Fatalf("AddPlayer: %v", err)
+	}
+	drawn, err := g.DrawWordTiles(3, "alice")
+	if err != nil {
+		t.Fatalf("DrawWordTiles: %v", err)
+	}
+
+	// No round has started yet.
+	if err := g.Submit(drawn, "alice"); !errors.Is(err, ErrNoActiveRound) {
+		t.Fatalf("expected ErrNoActiveRound, got %v", err)
+	}
+}
+
+func TestSubmitOncePerRound(t *testing.T) {
+	r := newTestRegistry()
+	g, _ := r.CreateGame()
+	if err := g.AddPlayer("alice"); err != nil {
+		t.Fatalf("AddPlayer: %v", err)
+	}
+	if _, _, err := g.StartRound(); err != nil {
+		t.Fatalf("StartRound: %v", err)
+	}
+
+	// First submission of the round succeeds.
+	first, _ := g.DrawWordTiles(2, "alice")
+	if err := g.Submit(first, "alice"); err != nil {
+		t.Fatalf("first Submit: %v", err)
+	}
+
+	// A second submission in the same round is rejected.
+	second, _ := g.DrawWordTiles(2, "alice")
+	if err := g.Submit(second, "alice"); !errors.Is(err, ErrAlreadySubmitted) {
+		t.Fatalf("expected ErrAlreadySubmitted on second submit, got %v", err)
+	}
+
+	// A new round re-enables submission and clears the previous notes.
+	if _, _, err := g.StartRound(); err != nil {
+		t.Fatalf("StartRound 2: %v", err)
+	}
+	if notes := g.GetSubmittedNotes(); len(notes) != 0 {
+		t.Fatalf("expected notes cleared at round start, got %d", len(notes))
+	}
+	if err := g.Submit(second, "alice"); err != nil {
+		t.Fatalf("Submit after new round: %v", err)
+	}
+}
+
+func TestStartRoundAdvancesAndWraps(t *testing.T) {
+	r := newTestRegistry()
+	g, _ := r.CreateGame()
+
+	n := len(samplePrompts())
+	seen := make([]string, 0, n)
+	for i := 1; i <= n; i++ {
+		round, prompt, err := g.StartRound()
+		if err != nil {
+			t.Fatalf("StartRound %d: %v", i, err)
+		}
+		if round != i {
+			t.Fatalf("expected round %d, got %d", i, round)
+		}
+		seen = append(seen, prompt)
+	}
+
+	// The deck is a full copy: every prompt appears exactly once before wrap.
+	if len(seen) != n {
+		t.Fatalf("expected %d prompts drawn, got %d", n, len(seen))
+	}
+	for _, want := range samplePrompts() {
+		if !slices.Contains(seen, want) {
+			t.Fatalf("prompt %q was never drawn: deck is not a full copy", want)
+		}
+	}
+
+	// Exhausting the deck reshuffles rather than erroring.
+	round, prompt, err := g.StartRound()
+	if err != nil {
+		t.Fatalf("StartRound after exhaustion: %v", err)
+	}
+	if round != n+1 || prompt == "" {
+		t.Fatalf("expected wrap to round %d with a prompt, got round %d prompt %q", n+1, round, prompt)
+	}
+
+	if gotRound, gotPrompt := g.CurrentRound(); gotRound != round || gotPrompt != prompt {
+		t.Fatalf("CurrentRound mismatch: got (%d,%q) want (%d,%q)", gotRound, gotPrompt, round, prompt)
+	}
+}
+
+func TestPromptDeckOrderVariesBetweenGames(t *testing.T) {
+	// Use a larger deck so a matching shuffle is astronomically unlikely.
+	prompts := make([]string, 30)
+	for i := range prompts {
+		prompts[i] = fmt.Sprintf("prompt-%02d", i)
+	}
+	r := NewRegistry(sampleTileKeys(), prompts)
+
+	drawAll := func() []string {
+		g, _ := r.CreateGame()
+		out := make([]string, len(prompts))
+		for i := range prompts {
+			_, p, _ := g.StartRound()
+			out[i] = p
+		}
+		return out
+	}
+
+	if slices.Equal(drawAll(), drawAll()) {
+		t.Fatal("two games drew prompts in identical order; deck is not shuffled per game")
 	}
 }

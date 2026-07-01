@@ -31,7 +31,13 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("Failed to load words.csv: %s", err.Error()))
 	}
-	game.Games = game.NewRegistry(tileKeys)
+
+	// Prompts are optional: LoadPromptsFromFile falls back to a built-in bank
+	// (and logs a warning) if PROMPTS_FILE_PATH is unset or unreadable, so the
+	// server still boots with a playable game.
+	prompts := game.LoadPromptsFromFile(os.Getenv("PROMPTS_FILE_PATH"))
+
+	game.Games = game.NewRegistry(tileKeys, prompts)
 
 	r := gin.Default()
 	// CORS setup - allow only specific origins
@@ -54,6 +60,11 @@ func main() {
 	r.GET("/games/:code/players/:id/tiles", game.GetTiles)
 	r.POST("/games/:code/draw", game.DrawTiles)
 	r.POST("/games/:code/submit", game.SubmitNote)
+
+	// Rounds / prompts.
+	r.POST("/games/:code/rounds", game.StartRound) // manager draws the next prompt
+	r.GET("/games/:code/round", game.GetRound)     // current round (poll / reconnect)
+	r.GET("/games/:code/events", game.ServeEvents) // WebSocket push channel
 
 	// Manager (host) note board for a game.
 	r.GET("/games/:code/submitted-notes", game.GetSubmittedNotes)

@@ -16,6 +16,13 @@ var Games *Registry
 
 type PlayerId string
 
+// Round/submit errors the router maps to 409 Conflict (a friendly, retryable
+// condition) rather than a hard 500.
+var (
+	ErrNoActiveRound    = errors.New("no active round yet; wait for the host to draw a prompt")
+	ErrAlreadySubmitted = errors.New("you already submitted a note this round")
+)
+
 // Manager holds the state for a single game. Many games run concurrently, each
 // identified by its code and held in the Registry.
 type Manager struct {
@@ -23,21 +30,43 @@ type Manager struct {
 	players        []PlayerId
 	wordTiles      map[string]PlayerId
 	submittedNotes []string
-	mux            sync.RWMutex
+
+	// Round / prompt state. A "round" is an active prompt: the host draws the
+	// next prompt off promptDeck to start one. round is 0 until the first draw.
+	promptDeck         []string          // shuffled copy of the registry prompts
+	promptCursor       int               // index of the next prompt to draw
+	round              int               // 0 = no round started; ++ each draw
+	currentPrompt      string            // the active round's prompt ("" if none)
+	submittedThisRound map[PlayerId]bool // players who submitted this round
+
+	hub *hub // WebSocket subscribers for this game (push channel)
+
+	mux sync.RWMutex
 }
 
 // newGame builds a fresh game seeded with its own copy of the tile pool (every
-// tile available). tileKeys are the "<idx>|<word>" keys loaded once from CSV.
-func newGame(code string, tileKeys []string) *Manager {
+// tile available) and its own shuffled prompt deck, so each game plays a unique
+// prompt order. tileKeys are the "<idx>|<word>" keys loaded once from CSV;
+// prompts is the base prompt list held by the Registry.
+func newGame(code string, tileKeys, prompts []string) *Manager {
 	wordTiles := make(map[string]PlayerId, len(tileKeys))
 	for _, key := range tileKeys {
 		wordTiles[key] = ""
 	}
+
+	promptDeck := slices.Clone(prompts)
+	rand.Shuffle(len(promptDeck), func(i, j int) {
+		promptDeck[i], promptDeck[j] = promptDeck[j], promptDeck[i]
+	})
+
 	return &Manager{
-		code:      code,
-		players:   make([]PlayerId, 0),
-		wordTiles: wordTiles,
-		mux:       sync.RWMutex{},
+		code:               code,
+		players:            make([]PlayerId, 0),
+		wordTiles:          wordTiles,
+		promptDeck:         promptDeck,
+		submittedThisRound: make(map[PlayerId]bool),
+		hub:                newHub(),
+		mux:                sync.RWMutex{},
 	}
 }
 
@@ -46,10 +75,12 @@ func (gm *Manager) Code() string {
 	return gm.code
 }
 
-// Registry owns the collection of live games and the shared base tile list.
+// Registry owns the collection of live games and the shared base tile and
+// prompt lists that seed every new game.
 type Registry struct {
 	games    map[string]*Manager
 	tileKeys []string
+	prompts  []string
 	mux      sync.RWMutex
 }
 
@@ -57,11 +88,13 @@ type Registry struct {
 // giving up (effectively "the registry is full").
 const codeGenAttempts = 100
 
-// NewRegistry creates an empty registry that seeds every new game from tileKeys.
-func NewRegistry(tileKeys []string) *Registry {
+// NewRegistry creates an empty registry that seeds every new game from tileKeys
+// (the word pool) and prompts (the prompt deck).
+func NewRegistry(tileKeys, prompts []string) *Registry {
 	return &Registry{
 		games:    make(map[string]*Manager),
 		tileKeys: tileKeys,
+		prompts:  prompts,
 		mux:      sync.RWMutex{},
 	}
 }
@@ -77,7 +110,7 @@ func (r *Registry) CreateGame() (*Manager, error) {
 		if _, exists := r.games[code]; exists {
 			continue
 		}
-		game := newGame(code, r.tileKeys)
+		game := newGame(code, r.tileKeys, r.prompts)
 		r.games[code] = game
 		log.Printf("Created game: %s", code)
 		return game, nil
@@ -103,10 +136,15 @@ func (r *Registry) CloseGame(code string) error {
 	r.mux.Lock()
 	defer r.mux.Unlock()
 
-	if _, ok := r.games[code]; !ok {
+	game, ok := r.games[code]
+	if !ok {
 		return fmt.Errorf("game %s not found", code)
 	}
 	delete(r.games, code)
+	// Tell every connected client the game is over, then close their sockets so
+	// they fall back to the join/lobby screen.
+	game.hub.broadcast(event{Type: "game_ended"})
+	game.hub.closeAll()
 	log.Printf("Closed game: %s", code)
 	return nil
 }
@@ -143,6 +181,7 @@ func (gm *Manager) RemovePlayer(id PlayerId) error {
 		return errors.New("cannot remove player. id does not exist")
 	}
 	gm.players = slices.Delete(gm.players, index, index+1)
+	delete(gm.submittedThisRound, id)
 
 	log.Printf("Removed player: %+v\n", id)
 	return nil
@@ -197,6 +236,15 @@ func (gm *Manager) Submit(note []string, id PlayerId) error {
 		return fmt.Errorf("player %s not found", id)
 	}
 
+	// One note per round: a note only counts against an active round, and a
+	// player may submit at most once until the host draws the next prompt.
+	if gm.round == 0 {
+		return ErrNoActiveRound
+	}
+	if gm.submittedThisRound[id] {
+		return ErrAlreadySubmitted
+	}
+
 	fmt.Println("RECEIVED NOTE:")
 	// Verification Loop
 	for _, word := range note {
@@ -226,10 +274,68 @@ func (gm *Manager) Submit(note []string, id PlayerId) error {
 		gm.wordTiles[word] = ""
 	}
 
-	// Add to submittedNotes
+	// Add to submittedNotes and record that this player has answered the round.
 	gm.submittedNotes = append(gm.submittedNotes, sb.String())
+	gm.submittedThisRound[id] = true
 
 	return nil
+}
+
+// StartRound draws the next prompt off this game's shuffled deck and begins a
+// new round: it clears the previous round's submitted notes and resets the
+// per-round submission set. When the deck is exhausted it reshuffles and starts
+// over, so a game never runs out of prompts. Returns the new round number and
+// its prompt.
+func (gm *Manager) StartRound() (int, string, error) {
+	gm.mux.Lock()
+
+	if len(gm.promptDeck) == 0 {
+		gm.mux.Unlock()
+		return 0, "", errors.New("no prompts available")
+	}
+	if gm.promptCursor >= len(gm.promptDeck) {
+		// Deck exhausted — reshuffle and start over.
+		rand.Shuffle(len(gm.promptDeck), func(i, j int) {
+			gm.promptDeck[i], gm.promptDeck[j] = gm.promptDeck[j], gm.promptDeck[i]
+		})
+		gm.promptCursor = 0
+	}
+
+	gm.currentPrompt = gm.promptDeck[gm.promptCursor]
+	gm.promptCursor++
+	gm.round++
+	gm.submittedThisRound = make(map[PlayerId]bool)
+	gm.submittedNotes = make([]string, 0)
+	round, prompt := gm.round, gm.currentPrompt
+
+	gm.mux.Unlock()
+
+	// Push the new round to every connected client. Broadcast outside the lock
+	// so a slow subscriber can't stall game state.
+	gm.hub.broadcast(event{Type: "round_started", Round: round, Prompt: prompt})
+	log.Printf("Game %s: started round %d with prompt %q", gm.code, round, prompt)
+	return round, prompt, nil
+}
+
+// CurrentRound returns the active round number and prompt (0 / "" before the
+// first StartRound). Used by the GET /round endpoint and the reconnect snapshot.
+func (gm *Manager) CurrentRound() (int, string) {
+	gm.mux.RLock()
+	defer gm.mux.RUnlock()
+	return gm.round, gm.currentPrompt
+}
+
+// RoundSubmissionStatus reports the current round plus how many of the game's
+// players have submitted a note this round, for the live host indicator.
+func (gm *Manager) RoundSubmissionStatus() (round, count, total int) {
+	gm.mux.RLock()
+	defer gm.mux.RUnlock()
+	return gm.round, len(gm.submittedThisRound), len(gm.players)
+}
+
+// Hub exposes this game's WebSocket subscriber hub (used by the events handler).
+func (gm *Manager) Hub() *hub {
+	return gm.hub
 }
 
 func (gm *Manager) GetDrawnWordTiles(id PlayerId) ([]string, error) {
