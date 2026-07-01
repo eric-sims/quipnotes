@@ -1,6 +1,7 @@
 package game
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -27,6 +28,13 @@ type CreateGameResponse struct {
 type GameInfoResponse struct {
 	Code    string     `json:"code"`
 	Players []PlayerId `json:"players"`
+}
+
+// RoundResponse describes the active round: its number (0 before the first
+// prompt is drawn) and prompt text.
+type RoundResponse struct {
+	Round  int    `json:"round"`
+	Prompt string `json:"prompt"`
 }
 
 // resolveGame looks up the game named by the :code path param. On failure it
@@ -87,6 +95,59 @@ func GetGameInfo(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, GameInfoResponse{Code: g.Code(), Players: g.GetPlayers()})
+}
+
+// StartRound godoc
+//	@Summary		Draws the next prompt (starts a round)
+//	@Description	Pops the next prompt off the game's shuffled deck, begins a new round, and clears the previous round's notes. Driven by the manager (host).
+//	@Router			/games/{code}/rounds [post]
+//	@Produce		json
+//	@Param			code	path		string	true	"game code"
+//	@Failure		404		{object}	ErrorResponse
+//	@Failure		500		{object}	ErrorResponse
+//	@Success		201		{object}	RoundResponse
+func StartRound(c *gin.Context) {
+	g, ok := resolveGame(c)
+	if !ok {
+		return
+	}
+	round, prompt, err := g.StartRound()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, RoundResponse{Round: round, Prompt: prompt})
+}
+
+// GetRound godoc
+//	@Summary		Current round
+//	@Description	Returns the active round number and prompt (round 0 before the first prompt is drawn). Used for polling and reconnect.
+//	@Router			/games/{code}/round [get]
+//	@Produce		json
+//	@Param			code	path		string	true	"game code"
+//	@Failure		404		{object}	ErrorResponse
+//	@Success		200		{object}	RoundResponse
+func GetRound(c *gin.Context) {
+	g, ok := resolveGame(c)
+	if !ok {
+		return
+	}
+	round, prompt := g.CurrentRound()
+	c.JSON(http.StatusOK, RoundResponse{Round: round, Prompt: prompt})
+}
+
+// ServeEvents godoc
+//	@Summary		Game event stream (WebSocket)
+//	@Description	Upgrades to a WebSocket that pushes round_started / submission / game_ended events for the game. Both players and the host subscribe.
+//	@Router			/games/{code}/events [get]
+//	@Param			code	path	string	true	"game code"
+//	@Failure		404		{object}	ErrorResponse
+func ServeEvents(c *gin.Context) {
+	g, ok := resolveGame(c)
+	if !ok {
+		return
+	}
+	serveEvents(g, c.Writer, c.Request)
 }
 
 // DrawTiles godoc
@@ -168,6 +229,7 @@ type SubmitNoteRequest struct {
 //	@Param			request	body		game.SubmitNoteRequest	true	"contains the note"
 //	@Failure		400		{object}	ErrorResponse
 //	@Failure		404		{object}	ErrorResponse
+//	@Failure		409		{object}	ErrorResponse
 //	@Failure		500		{object}	ErrorResponse
 //	@Success		200
 func SubmitNote(c *gin.Context) {
@@ -183,9 +245,20 @@ func SubmitNote(c *gin.Context) {
 	}
 
 	if err := g.Submit(request.Note, request.PlayerId); err != nil {
+		// "No active round" / "already submitted this round" are friendly,
+		// retryable conditions — 409 so the client can gate the button instead
+		// of treating it as a hard failure.
+		if errors.Is(err, ErrNoActiveRound) || errors.Is(err, ErrAlreadySubmitted) {
+			c.JSON(http.StatusConflict, ErrorResponse{Error: err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return
 	}
+
+	// Push a live submission count to any connected host screen.
+	round, count, total := g.RoundSubmissionStatus()
+	g.Hub().broadcast(event{Type: "submission", Round: round, Count: count, Total: total})
 
 	c.Status(http.StatusOK)
 }

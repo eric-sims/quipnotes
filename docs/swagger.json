@@ -143,6 +143,29 @@
                 }
             }
         },
+        "/games/{code}/events": {
+            "get": {
+                "description": "Upgrades to a WebSocket that pushes round_started / submission / game_ended events for the game. Both players and the host subscribe.",
+                "summary": "Game event stream (WebSocket)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "game code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/games/{code}/players": {
             "post": {
                 "description": "Adds a player to a game. The playerId must be unique within the game.",
@@ -289,6 +312,76 @@
                 }
             }
         },
+        "/games/{code}/round": {
+            "get": {
+                "description": "Returns the active round number and prompt (round 0 before the first prompt is drawn). Used for polling and reconnect.",
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Current round",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "game code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/game.RoundResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/games/{code}/rounds": {
+            "post": {
+                "description": "Pops the next prompt off the game's shuffled deck, begins a new round, and clears the previous round's notes. Driven by the manager (host).",
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Draws the next prompt (starts a round)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "game code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/game.RoundResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/games/{code}/submit": {
             "post": {
                 "description": "Send a string array to turn in your wordTiles for the game.",
@@ -326,6 +419,12 @@
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/game.ErrorResponse"
                         }
@@ -449,6 +548,17 @@
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "game.RoundResponse": {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string"
+                },
+                "round": {
+                    "type": "integer"
                 }
             }
         },

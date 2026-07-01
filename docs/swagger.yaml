@@ -30,6 +30,13 @@ definitions:
           type: string
         type: array
     type: object
+  game.RoundResponse:
+    properties:
+      prompt:
+        type: string
+      round:
+        type: integer
+    type: object
   game.SubmitNoteRequest:
     properties:
       id:
@@ -143,6 +150,22 @@ paths:
           schema:
             $ref: '#/definitions/game.ErrorResponse'
       summary: Draws Tiles
+  /games/{code}/events:
+    get:
+      description: Upgrades to a WebSocket that pushes round_started / submission
+        / game_ended events for the game. Both players and the host subscribe.
+      parameters:
+      - description: game code
+        in: path
+        name: code
+        required: true
+        type: string
+      responses:
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+      summary: Game event stream (WebSocket)
   /games/{code}/players:
     post:
       consumes:
@@ -241,6 +264,54 @@ paths:
           schema:
             $ref: '#/definitions/game.ErrorResponse'
       summary: Gets Drawn Tiles
+  /games/{code}/round:
+    get:
+      description: Returns the active round number and prompt (round 0 before the
+        first prompt is drawn). Used for polling and reconnect.
+      parameters:
+      - description: game code
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/game.RoundResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+      summary: Current round
+  /games/{code}/rounds:
+    post:
+      description: Pops the next prompt off the game's shuffled deck, begins a new
+        round, and clears the previous round's notes. Driven by the manager (host).
+      parameters:
+      - description: game code
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/game.RoundResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+      summary: Draws the next prompt (starts a round)
   /games/{code}/submit:
     post:
       consumes:
@@ -267,6 +338,10 @@ paths:
             $ref: '#/definitions/game.ErrorResponse'
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+        "409":
+          description: Conflict
           schema:
             $ref: '#/definitions/game.ErrorResponse'
         "500":
