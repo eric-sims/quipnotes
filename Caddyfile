@@ -1,0 +1,15 @@
+# Caddy reverse proxy with automatic HTTPS (Let's Encrypt).
+# DOMAIN and ACME_EMAIL come from the VM's .env (see docker-compose.prod.yaml).
+#
+# Caddy obtains and renews the TLS cert for $DOMAIN automatically, redirects
+# http→https, and transparently proxies WebSocket upgrades (the /events stream)
+# to the Go server on the internal Docker network.
+
+{
+	# Email used for the Let's Encrypt account (expiry notices).
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	reverse_proxy app:8081
+}

@@ -1,0 +1,77 @@
+name: Build & Deploy
+
+# Build the server image on every push to master, push it to Google Artifact
+# Registry, then tell the GCE VM to pull the new image and restart.
+on:
+  push:
+    branches: [master]
+  workflow_dispatch: {}
+
+# Configure these in the repo:
+#   Settings → Secrets and variables → Actions
+#
+# Secrets (encrypted):
+#   GCP_SA_KEY        JSON key for the deployer service account
+#
+# Variables (Repository variables tab — not secret):
+#   GCP_PROJECT_ID    e.g. quipnotes-470112
+#   GAR_LOCATION      e.g. us-central1   (region of your Artifact Registry)
+#   GAR_REPOSITORY    e.g. quipnotes     (Artifact Registry repo name)
+#   GCE_INSTANCE      e.g. quipnotes-vm  (VM name)
+#   GCE_ZONE          e.g. us-central1-a (VM zone)
+env:
+  IMAGE: ${{ vars.GAR_LOCATION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GAR_REPOSITORY }}/quipnotes
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ vars.GAR_LOCATION }}-docker.pkg.dev --quiet
+
+      - name: Build image
+        run: |
+          docker build \
+            -t "$IMAGE:${{ github.sha }}" \
+            -t "$IMAGE:latest" \
+            .
+
+      - name: Push image
+        run: |
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+
+      # Ship the deploy config (compose file + Caddyfile) so changes to them roll
+      # out with the code. The VM owns .env and data/ (secrets/proprietary), which
+      # are never sent from CI.
+      - name: Copy deploy config to VM
+        run: |
+          gcloud compute scp docker-compose.prod.yaml Caddyfile \
+            "${{ vars.GCE_INSTANCE }}":/opt/quipnotes/ \
+            --zone "${{ vars.GCE_ZONE }}" \
+            --tunnel-through-iap
+
+      # Deploy over SSH tunneled through IAP, so the VM never needs an open
+      # public SSH port. The VM pulls the freshly-pushed image and restarts.
+      - name: Deploy to VM
+        run: |
+          gcloud compute ssh "${{ vars.GCE_INSTANCE }}" \
+            --zone "${{ vars.GCE_ZONE }}" \
+            --tunnel-through-iap \
+            --command "\
+              export QUIPNOTES_IMAGE='$IMAGE:${{ github.sha }}' && \
+              cd /opt/quipnotes && \
+              docker pull \"\$QUIPNOTES_IMAGE\" && \
+              docker compose -f docker-compose.prod.yaml up -d --remove-orphans && \
+              docker image prune -f"
