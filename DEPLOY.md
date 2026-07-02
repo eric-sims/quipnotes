@@ -198,9 +198,11 @@ Then, **on the VM**:
 curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker "$USER"   # log out/in (or reconnect) for this to take effect
 
-# Let Docker pull from Artifact Registry using the VM's service account
+# Let Docker pull from Artifact Registry using the VM's service account.
+# Configure it for BOTH your user (manual runs) and root (CI runs docker via
+# sudo). REGION here = your region, e.g. us-central1.
 gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
-# (REGION here = your region, e.g. us-central1)
+sudo gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
 # App directory
 sudo mkdir -p /opt/quipnotes/data
