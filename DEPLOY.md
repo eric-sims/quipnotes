@@ -39,12 +39,12 @@ the DNS record, and the domain config.
 Set some shell variables you'll reuse (pick a globally-unique project id):
 
 ```bash
-export PROJECT_ID="quipnotes-$RANDOM"   # must be globally unique
+export PROJECT_ID="quipnotes-server"   # must be globally unique
 export REGION="us-central1"             # free-tier region: us-central1 | us-west1 | us-east1
 export ZONE="us-central1-a"
 export REPO="quipnotes"                 # Artifact Registry repo name
 export VM="quipnotes-vm"
-export DOMAIN="api.example.com"         # the (sub)domain that will serve the game
+export DOMAIN="api.rotcev.com"         # the (sub)domain that will serve the game
 ```
 
 ---
@@ -273,6 +273,15 @@ gcloud projects add-iam-policy-binding "$PROJECT_ID" \
   --member="serviceAccount:$SA" --role="roles/iap.tunnelResourceAccessor"
 gcloud projects add-iam-policy-binding "$PROJECT_ID" \
   --member="serviceAccount:$SA" --role="roles/compute.viewer"
+
+# REQUIRED: the VM runs as the default Compute service account, and SSHing into a
+# VM that has an attached SA requires "act as" permission on that SA. Without
+# this, OS Login authorizes the principal but the login is rejected with
+# "Permission denied (publickey)". Scoped to just the VM's SA (not project-wide).
+PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
+gcloud iam service-accounts add-iam-policy-binding \
+  "${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+  --member="serviceAccount:$SA" --role="roles/iam.serviceAccountUser"
 
 # Create a JSON key (this is the file you paste into GitHub as GCP_SA_KEY)
 gcloud iam service-accounts keys create gh-deployer-key.json --iam-account="$SA"
