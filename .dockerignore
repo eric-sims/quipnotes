@@ -1,0 +1,20 @@
+# Secrets / proprietary data — never copy into the image
+.env
+.env.local
+data/words.csv
+
+# VCS & local tooling
+.git
+.gitignore
+.idea
+.vscode
+.DS_Store
+
+# Build artifacts
+quipnotes
+bin
+
+# Deploy/config files not needed inside the build context
+docker-compose*.yaml
+Dockerfile
+*.md

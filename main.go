@@ -15,14 +15,16 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-//	@title			quipNotes Server
-//	@version		1.0
-//	@description	This handles the game logic and communication
-//	@host			localhost:8081
+// @title			quipNotes Server
+// @version		1.0
+// @description	This handles the game logic and communication
+// @host			localhost:8081
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		panic(fmt.Sprintf("Error loading .env file: %s", err.Error()))
+	// A .env file is convenient for local dev but optional in production, where
+	// configuration is injected as real environment variables (e.g. by Docker
+	// Compose on the VM). A missing file is tolerated; anything else is logged.
+	if err := godotenv.Load(); err != nil {
+		log.Printf("No .env file loaded (%s); using process environment", err.Error())
 	}
 	filePath := os.Getenv("WORDS_FILE_PATH")
 
@@ -72,9 +74,14 @@ func main() {
 	docs.SwaggerInfo.BasePath = ""
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	log.Println("Starting server...")
-	err = r.Run(":8081")
-	if err != nil {
+	// Bind to $PORT when provided (containers/PaaS inject it), else the local
+	// default of 8081.
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8081"
+	}
+	log.Printf("Starting server on :%s ...", port)
+	if err := r.Run(":" + port); err != nil {
 		panic(err)
 	}
 }

@@ -1,0 +1,53 @@
+# Runs on the GCE VM. Caddy terminates TLS (automatic Let's Encrypt certs) and
+# reverse-proxies to the Go server over the internal Docker network. The app
+# image is code-only; the proprietary words.csv, optional prompts.txt, and the
+# .env live on the VM under /opt/quipnotes and are mounted / injected at runtime.
+#
+#   Layout on the VM:
+#     /opt/quipnotes/
+#       ├── docker-compose.prod.yaml   (this file)
+#       ├── Caddyfile                  (reverse proxy config)
+#       ├── .env                       (WORDS_FILE_PATH, DOMAIN, ACME_EMAIL, ...)
+#       └── data/
+#           ├── words.csv
+#           └── prompts.txt            (optional)
+#
+# QUIPNOTES_IMAGE is set by the deploy step (e.g. the Artifact Registry path
+# with a commit-SHA tag). Falls back to :latest for manual runs.
+
+services:
+  app:
+    image: ${QUIPNOTES_IMAGE:-quipnotes:latest}
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Internal port; only Caddy talks to it (not published to the host).
+      PORT: "8081"
+    volumes:
+      # Mount the data dir read-only at /data (matches WORDS_FILE_PATH in .env).
+      - ./data:/data:ro
+    expose:
+      - "8081"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    env_file:
+      # Supplies DOMAIN and ACME_EMAIL used by the Caddyfile.
+      - .env
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Persist issued certs across restarts (avoids Let's Encrypt rate limits).
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  caddy_data:
+  caddy_config:
