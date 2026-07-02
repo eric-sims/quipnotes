@@ -53,25 +53,30 @@ jobs:
           docker push "$IMAGE:latest"
 
       # Ship the deploy config (compose file + Caddyfile) so changes to them roll
-      # out with the code. The VM owns .env and data/ (secrets/proprietary), which
-      # are never sent from CI.
+      # out with the code. CI logs in as the deployer's OS Login user, which does
+      # not own /opt/quipnotes, so we stage in /tmp (world-writable) and sudo-move
+      # into place in the deploy step. The VM owns .env and data/ (secrets/
+      # proprietary), which are never sent from CI.
       - name: Copy deploy config to VM
         run: |
           gcloud compute scp docker-compose.prod.yaml Caddyfile \
-            "${{ vars.GCE_INSTANCE }}":/opt/quipnotes/ \
+            "${{ vars.GCE_INSTANCE }}":/tmp/ \
             --zone "${{ vars.GCE_ZONE }}" \
             --tunnel-through-iap
 
-      # Deploy over SSH tunneled through IAP, so the VM never needs an open
-      # public SSH port. The VM pulls the freshly-pushed image and restarts.
+      # Deploy over SSH tunneled through IAP (no public SSH port). osAdminLogin
+      # grants passwordless sudo, so we move config into place and run docker as
+      # root (root's docker is authed to Artifact Registry via the one-time
+      # `sudo gcloud auth configure-docker` in DEPLOY.md).
       - name: Deploy to VM
         run: |
           gcloud compute ssh "${{ vars.GCE_INSTANCE }}" \
             --zone "${{ vars.GCE_ZONE }}" \
             --tunnel-through-iap \
             --command "\
-              export QUIPNOTES_IMAGE='$IMAGE:${{ github.sha }}' && \
+              sudo install -d /opt/quipnotes && \
+              sudo mv /tmp/docker-compose.prod.yaml /tmp/Caddyfile /opt/quipnotes/ && \
               cd /opt/quipnotes && \
-              docker pull \"\$QUIPNOTES_IMAGE\" && \
-              docker compose -f docker-compose.prod.yaml up -d --remove-orphans && \
-              docker image prune -f"
+              sudo docker pull '$IMAGE:${{ github.sha }}' && \
+              sudo env QUIPNOTES_IMAGE='$IMAGE:${{ github.sha }}' docker compose -f docker-compose.prod.yaml up -d --remove-orphans && \
+              sudo docker image prune -f"
