@@ -265,6 +265,83 @@ func TestSubmitOncePerRound(t *testing.T) {
 	}
 }
 
+func TestSubmitPreservesBreaks(t *testing.T) {
+	r := newTestRegistry()
+	g, _ := r.CreateGame()
+	if err := g.AddPlayer("alice"); err != nil {
+		t.Fatalf("AddPlayer: %v", err)
+	}
+	if _, _, err := g.StartRound(); err != nil {
+		t.Fatalf("StartRound: %v", err)
+	}
+	drawn, err := g.DrawWordTiles(2, "alice")
+	if err != nil {
+		t.Fatalf("DrawWordTiles: %v", err)
+	}
+
+	// A break between the two tiles must survive into the stored note.
+	note := []string{drawn[0], BreakToken, drawn[1]}
+	if err := g.Submit(note, "alice"); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	notes := g.GetSubmittedNotes()
+	if len(notes) != 1 {
+		t.Fatalf("expected 1 note, got %d", len(notes))
+	}
+	if !slices.Equal(notes[0], note) {
+		t.Fatalf("expected stored note %v, got %v", note, notes[0])
+	}
+	// Breaks release no tile, but both real tiles return to the pool.
+	if held, _ := g.GetDrawnWordTiles("alice"); len(held) != 0 {
+		t.Fatalf("expected alice to hold 0 tiles after submit, got %d", len(held))
+	}
+}
+
+func TestSubmitNormalizesBreaks(t *testing.T) {
+	r := newTestRegistry()
+	g, _ := r.CreateGame()
+	if err := g.AddPlayer("alice"); err != nil {
+		t.Fatalf("AddPlayer: %v", err)
+	}
+	if _, _, err := g.StartRound(); err != nil {
+		t.Fatalf("StartRound: %v", err)
+	}
+	drawn, _ := g.DrawWordTiles(2, "alice")
+
+	// Leading, trailing, and doubled breaks all collapse away.
+	note := []string{BreakToken, drawn[0], BreakToken, BreakToken, drawn[1], BreakToken}
+	if err := g.Submit(note, "alice"); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	want := []string{drawn[0], BreakToken, drawn[1]}
+	got := g.GetSubmittedNotes()[0]
+	if !slices.Equal(got, want) {
+		t.Fatalf("expected normalized note %v, got %v", want, got)
+	}
+}
+
+func TestSubmitRejectsBreaksOnlyNote(t *testing.T) {
+	r := newTestRegistry()
+	g, _ := r.CreateGame()
+	if err := g.AddPlayer("alice"); err != nil {
+		t.Fatalf("AddPlayer: %v", err)
+	}
+	if _, _, err := g.StartRound(); err != nil {
+		t.Fatalf("StartRound: %v", err)
+	}
+	// Hold a tile so we can confirm the rejected submit consumes nothing.
+	drawn, _ := g.DrawWordTiles(1, "alice")
+
+	if err := g.Submit([]string{BreakToken, BreakToken}, "alice"); err == nil {
+		t.Fatal("expected an error submitting a note with no tiles")
+	}
+	if held, _ := g.GetDrawnWordTiles("alice"); len(held) != len(drawn) {
+		t.Fatalf("expected alice to keep %d tiles after a rejected submit, got %d", len(drawn), len(held))
+	}
+}
+
 func TestStartRoundAdvancesAndWraps(t *testing.T) {
 	r := newTestRegistry()
 	g, _ := r.CreateGame()

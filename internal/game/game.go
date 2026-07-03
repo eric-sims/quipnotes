@@ -16,6 +16,13 @@ var Games *Registry
 
 type PlayerId string
 
+// BreakToken is the reserved token a note may contain to mark a line break
+// between clusters of tiles. It carries no "<id>|<word>" tile — it just tells
+// the host to start a new line — so it can never collide with a real tile
+// (tiles always contain "|", and no word is a bare newline). The clients emit
+// and render the same token; see quipnotesclient/src/tiles.js.
+const BreakToken = "\n"
+
 // Player is a roster entry as it crosses the wire (GET /players and the
 // "players" event). Today it carries only the id; a Score field will be added
 // when scoring lands, which is an additive, non-breaking change to the shape.
@@ -46,7 +53,7 @@ type Manager struct {
 	code           string
 	players        []PlayerId
 	wordTiles      map[string]PlayerId
-	submittedNotes []string
+	submittedNotes [][]string // each note is its ordered token list (tiles + BreakToken)
 
 	// Round / prompt state. A "round" is an active prompt: the host draws the
 	// next prompt off promptDeck to start one. round is 0 until the first draw.
@@ -254,12 +261,15 @@ func (gm *Manager) DrawWordTiles(n int, id PlayerId) ([]string, error) {
 	return gm.GetDrawnWordTiles(id)
 }
 
-// Submit - reads off the ransom note and puts the tiles back into the WordStore
+// Submit - reads off the ransom note and puts the tiles back into the WordStore.
+// A note is the player's ordered token list: tile keys ("42|banana") plus any
+// BreakToken markers for line breaks between clusters. The whole list is stored
+// (normalized) and handed to the host as-is, so all three sides speak the same
+// tile language rather than a flattened string.
 func (gm *Manager) Submit(note []string, id PlayerId) error {
 	gm.mux.Lock()
 	defer gm.mux.Unlock()
 
-	sb := strings.Builder{}
 	if !slices.Contains(gm.players, id) {
 		log.Printf("Player %s not found in game", id)
 		return fmt.Errorf("player %s not found", id)
@@ -274,40 +284,63 @@ func (gm *Manager) Submit(note []string, id PlayerId) error {
 		return ErrAlreadySubmitted
 	}
 
-	fmt.Println("RECEIVED NOTE:")
-	// Verification Loop
-	for _, word := range note {
-		if len(strings.Split(word, "|")) < 2 {
+	// Verification loop (no mutations yet). Break tokens carry no tile, so they
+	// skip the format/ownership checks; every real tile must belong to the
+	// submitting player. We also count the tiles so an all-breaks/empty note is
+	// rejected.
+	tileCount := 0
+	for _, token := range note {
+		if token == BreakToken {
+			continue
+		}
+		if len(strings.Split(token, "|")) < 2 {
 			log.Println("Found word with wrong format")
-			return fmt.Errorf("word %s not found in wrong format", word)
+			return fmt.Errorf("word %s not found in wrong format", token)
 		}
-
-		if gm.wordTiles[word] != id {
-			return fmt.Errorf("word %s not part of your word pile", word)
+		if gm.wordTiles[token] != id {
+			return fmt.Errorf("word %s not part of your word pile", token)
 		}
-
-		legibleWord := strings.Split(word, "|")[1] + " "
-		fmt.Printf(legibleWord)
-		sb.WriteString(legibleWord)
+		tileCount++
 	}
-	fmt.Println()
-	sb.WriteString("\n")
-
-	if strings.TrimSpace(sb.String()) == "" {
+	if tileCount == 0 {
 		return fmt.Errorf("no wordTiles found")
 	}
 
-	// Need to loop through a second time because if it errors out in the first loop, we want the
-	// player to keep his/her wordTiles
-	for _, word := range note {
-		gm.wordTiles[word] = ""
+	// Second pass, only now that the whole note has passed: release each tile
+	// back to the pool. Break tokens release nothing.
+	for _, token := range note {
+		if token == BreakToken {
+			continue
+		}
+		gm.wordTiles[token] = ""
 	}
 
-	// Add to submittedNotes and record that this player has answered the round.
-	gm.submittedNotes = append(gm.submittedNotes, sb.String())
+	// Store the normalized token list (edge/duplicate breaks collapsed) and
+	// record that this player has answered the round.
+	gm.submittedNotes = append(gm.submittedNotes, normalizeNote(note))
 	gm.submittedThisRound[id] = true
 
 	return nil
+}
+
+// normalizeNote trims leading/trailing BreakToken markers and collapses any run
+// of consecutive breaks to a single one, so the host never renders blank lines.
+func normalizeNote(note []string) []string {
+	out := make([]string, 0, len(note))
+	for _, token := range note {
+		if token == BreakToken {
+			// Skip a leading break or one that follows another break.
+			if len(out) == 0 || out[len(out)-1] == BreakToken {
+				continue
+			}
+		}
+		out = append(out, token)
+	}
+	// Drop a trailing break.
+	if n := len(out); n > 0 && out[n-1] == BreakToken {
+		out = out[:n-1]
+	}
+	return out
 }
 
 // StartRound draws the next prompt off this game's shuffled deck and begins a
@@ -334,7 +367,7 @@ func (gm *Manager) StartRound() (int, string, error) {
 	gm.promptCursor++
 	gm.round++
 	gm.submittedThisRound = make(map[PlayerId]bool)
-	gm.submittedNotes = make([]string, 0)
+	gm.submittedNotes = make([][]string, 0)
 	round, prompt := gm.round, gm.currentPrompt
 
 	gm.mux.Unlock()
@@ -398,7 +431,10 @@ func (gm *Manager) Roster() []Player {
 	return rosterLocked(gm.players)
 }
 
-func (gm *Manager) GetSubmittedNotes() []string {
+// GetSubmittedNotes returns the current round's notes, each as its ordered
+// token list (tile keys plus BreakToken markers). The host parses each token at
+// its boundary; see quipnotesmanager/src/components/NoteSlate.vue.
+func (gm *Manager) GetSubmittedNotes() [][]string {
 	gm.mux.Lock()
 	defer gm.mux.Unlock()
 

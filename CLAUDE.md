@@ -34,7 +34,7 @@ Each `game.Manager` is **one game** and holds:
 - `code string` — its 4-digit code
 - `players []PlayerId` — players who joined this game
 - `wordTiles map[string]PlayerId` — tile key (`"42|banana"`) → owning player ID, or `""` if available
-- `submittedNotes []string` — the current round's ransom notes (cleared each round)
+- `submittedNotes [][]string` — the current round's ransom notes, each an ordered token list of tile keys plus `"\n"` (`BreakToken`) line breaks (cleared each round)
 - `promptDeck []string` + `promptCursor int` — this game's shuffled prompt deck and next index
 - `round int` + `currentPrompt string` — active round (0 = none) and its prompt
 - `submittedThisRound map[PlayerId]bool` — who has answered this round (reset each round)
@@ -49,7 +49,7 @@ and broadcasts `round_started`. `Submit` returns `ErrNoActiveRound` / `ErrAlread
 
 Player IDs only need to be unique **within a game**.
 
-**Tile key format:** `"<csvRowIndex>|<word>"` — the index prefix makes duplicate words distinct. Every tile drawn, held, and submitted uses this format throughout the wire protocol.
+**Tile key format:** `"<csvRowIndex>|<word>"` — the index prefix makes duplicate words distinct. Every tile drawn, held, and submitted uses this format throughout the wire protocol. A submitted note may also contain the reserved **`BreakToken` (`"\n"`)** between clusters to mark a line break; it has no `|`, so it never collides with a tile. Notes are stored and returned as their **token list**, not flattened to a string — the host parses each token and renders each cluster on its own line.
 
 **Request/response flow** (every route is game-scoped):
 - `POST /games` — manager starts a game; returns `{code}`
@@ -60,11 +60,11 @@ Player IDs only need to be unique **within a game**.
 - `DELETE /games/:code/players/:id` — player leaves; broadcasts the updated `players` roster
 - `POST /games/:code/draw` → `{id, count}` — draws `count` available tiles, returns the player's **entire current pile** (not just new tiles)
 - `GET /games/:code/players/:id/tiles` — the player's current pile (used after submit to refresh)
-- `POST /games/:code/submit` → `{id, note: ["42|banana", ...]}` — validates all tiles belong to the player and the round rules, then atomically releases them and appends the human-readable note to `submittedNotes`; **409** if no active round or already answered this round
+- `POST /games/:code/submit` → `{id, note: ["42|banana", "\n", ...]}` — the ordered token list (tiles plus optional `"\n"` line breaks); validates all tiles belong to the player and the round rules, then atomically releases them and appends the normalized token list to `submittedNotes`; **409** if no active round or already answered this round
 - `POST /games/:code/rounds` — manager draws the next prompt; returns `{round, prompt}` (201)
 - `GET /games/:code/round` — current `{round, prompt}` (round 0 before any draw)
 - `GET /games/:code/events` — **WebSocket** upgrade; pushes `round_started {round,prompt}` (also a snapshot on connect), `submission {round,count,total}`, `players {players:[{id}]}` (roster on join/leave, also a snapshot on connect when non-empty), and `game_ended {}`
-- `GET /games/:code/submitted-notes` — manager reads the note board (notes are cleared server-side by `StartRound`, so there is no manual clear route)
+- `GET /games/:code/submitted-notes` → `{notes: [[token,...], ...]}` — manager reads the note board (each note an ordered token list; notes are cleared server-side by `StartRound`, so there is no manual clear route)
 
 A handler that can't find `:code` returns **404** (`resolveGame` in `router.go`). `router.go`
 holds all Gin handlers (with Swagger annotations) and the request/response structs. Pure

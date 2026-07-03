@@ -421,7 +421,7 @@ const docTemplate = `{
         },
         "/games/{code}/submit": {
             "post": {
-                "description": "Send a string array to turn in your wordTiles for the game.",
+                "description": "Send the ordered note tokens (tile keys \"42|banana\" plus optional \"\\n\" line breaks) to turn in your wordTiles for the game.",
                 "consumes": [
                     "application/json"
                 ],
@@ -477,7 +477,7 @@ const docTemplate = `{
         },
         "/games/{code}/submitted-notes": {
             "get": {
-                "description": "Returns a list of strings that are the submitted notes for the game",
+                "description": "Returns the submitted notes for the game. Each note is an ordered token list: tile keys (\"42|banana\") plus \"\\n\" (BreakToken) markers for line breaks.",
                 "produces": [
                     "application/json"
                 ],
@@ -499,7 +499,10 @@ const docTemplate = `{
                             "additionalProperties": {
                                 "type": "array",
                                 "items": {
-                                    "type": "string"
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
                                 }
                             }
                         }
@@ -601,6 +604,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "note": {
+                    "description": "Note is the ordered token list: tile keys (\"42|banana\") plus optional\n\"\\n\" (BreakToken) markers for line breaks between clusters.",
                     "type": "array",
                     "items": {
                         "type": "string"
