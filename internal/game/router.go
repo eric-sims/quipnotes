@@ -239,12 +239,14 @@ func GetTiles(c *gin.Context) {
 
 type SubmitNoteRequest struct {
 	PlayerId PlayerId `json:"id"`
-	Note     []string `json:"note"`
+	// Note is the ordered token list: tile keys ("42|banana") plus optional
+	// "\n" (BreakToken) markers for line breaks between clusters.
+	Note []string `json:"note"`
 }
 
 // SubmitNote godoc
 //	@Summary		Turn in Note
-//	@Description	Send a string array to turn in your wordTiles for the game.
+//	@Description	Send the ordered note tokens (tile keys "42|banana" plus optional "\n" line breaks) to turn in your wordTiles for the game.
 //	@Router			/games/{code}/submit [post]
 //	@Accept			json
 //	@Param			code	path	string	true	"game code"
@@ -353,12 +355,12 @@ func DeletePlayer(c *gin.Context) {
 
 // GetSubmittedNotes godoc
 //	@Summary		Returns the submitted notes
-//	@Description	Returns a list of strings that are the submitted notes for the game
+//	@Description	Returns the submitted notes for the game. Each note is an ordered token list: tile keys ("42|banana") plus "\n" (BreakToken) markers for line breaks.
 //	@Router			/games/{code}/submitted-notes [get]
 //	@Produce		json
 //	@Param			code	path		string	true	"game code"
 //	@Failure		404		{object}	ErrorResponse
-//	@Success		200		{object}	map[string][]string
+//	@Success		200		{object}	map[string][][]string
 func GetSubmittedNotes(c *gin.Context) {
 	g, ok := resolveGame(c)
 	if !ok {

@@ -54,6 +54,9 @@ definitions:
       id:
         type: string
       note:
+        description: |-
+          Note is the ordered token list: tile keys ("42|banana") plus optional
+          "\n" (BreakToken) markers for line breaks between clusters.
         items:
           type: string
         type: array
@@ -349,7 +352,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Send a string array to turn in your wordTiles for the game.
+      description: Send the ordered note tokens (tile keys "42|banana" plus optional
+        "\n" line breaks) to turn in your wordTiles for the game.
       parameters:
       - description: game code
         in: path
@@ -384,8 +388,9 @@ paths:
       summary: Turn in Note
   /games/{code}/submitted-notes:
     get:
-      description: Returns a list of strings that are the submitted notes for the
-        game
+      description: 'Returns the submitted notes for the game. Each note is an ordered
+        token list: tile keys ("42|banana") plus "\n" (BreakToken) markers for line
+        breaks.'
       parameters:
       - description: game code
         in: path
@@ -400,7 +405,9 @@ paths:
           schema:
             additionalProperties:
               items:
-                type: string
+                items:
+                  type: string
+                type: array
               type: array
             type: object
         "404":
