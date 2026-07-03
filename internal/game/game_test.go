@@ -1,6 +1,7 @@
 package game
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -86,6 +87,74 @@ func TestGamesAreIsolated(t *testing.T) {
 	}
 	if len(drawnB) != len(sampleTileKeys()) {
 		t.Fatalf("game B pool was affected by game A: bob drew %d of %d", len(drawnB), len(sampleTileKeys()))
+	}
+}
+
+func TestRosterReflectsPlayers(t *testing.T) {
+	r := newTestRegistry()
+	g, _ := r.CreateGame()
+
+	if roster := g.Roster(); len(roster) != 0 {
+		t.Fatalf("expected empty roster on a fresh game, got %d", len(roster))
+	}
+
+	if err := g.AddPlayer("alice"); err != nil {
+		t.Fatalf("AddPlayer alice: %v", err)
+	}
+	if err := g.AddPlayer("bob"); err != nil {
+		t.Fatalf("AddPlayer bob: %v", err)
+	}
+
+	roster := g.Roster()
+	if len(roster) != 2 || roster[0].Id != "alice" || roster[1].Id != "bob" {
+		t.Fatalf("unexpected roster: %+v", roster)
+	}
+
+	if err := g.RemovePlayer("alice"); err != nil {
+		t.Fatalf("RemovePlayer alice: %v", err)
+	}
+	if roster := g.Roster(); len(roster) != 1 || roster[0].Id != "bob" {
+		t.Fatalf("expected only bob after removal, got %+v", roster)
+	}
+}
+
+// nextPlayersEvent drains the client's channel for the next "players" event,
+// failing if none is queued.
+func nextPlayersEvent(t *testing.T, c *wsClient) event {
+	t.Helper()
+	select {
+	case payload := <-c.send:
+		var e event
+		if err := json.Unmarshal(payload, &e); err != nil {
+			t.Fatalf("bad payload: %v", err)
+		}
+		if e.Type != "players" {
+			t.Fatalf("expected a players event, got %q", e.Type)
+		}
+		return e
+	default:
+		t.Fatal("expected a players event but the channel was empty")
+		return event{}
+	}
+}
+
+func TestAddRemovePlayerBroadcastsRoster(t *testing.T) {
+	r := newTestRegistry()
+	g, _ := r.CreateGame()
+	c := newTestClient(g.hub)
+
+	if err := g.AddPlayer("alice"); err != nil {
+		t.Fatalf("AddPlayer: %v", err)
+	}
+	if e := nextPlayersEvent(t, c); len(e.Players) != 1 || e.Players[0].Id != "alice" {
+		t.Fatalf("unexpected join roster: %+v", e.Players)
+	}
+
+	if err := g.RemovePlayer("alice"); err != nil {
+		t.Fatalf("RemovePlayer: %v", err)
+	}
+	if e := nextPlayersEvent(t, c); len(e.Players) != 0 {
+		t.Fatalf("expected empty roster after leave, got %+v", e.Players)
 	}
 }
 

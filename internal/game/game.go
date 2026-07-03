@@ -16,6 +16,23 @@ var Games *Registry
 
 type PlayerId string
 
+// Player is a roster entry as it crosses the wire (GET /players and the
+// "players" event). Today it carries only the id; a Score field will be added
+// when scoring lands, which is an additive, non-breaking change to the shape.
+type Player struct {
+	Id PlayerId `json:"id"`
+}
+
+// rosterLocked maps the internal players slice to the wire roster. The caller
+// must hold gm.mux.
+func rosterLocked(players []PlayerId) []Player {
+	roster := make([]Player, len(players))
+	for i, id := range players {
+		roster[i] = Player{Id: id}
+	}
+	return roster
+}
+
 // Round/submit errors the router maps to 409 Conflict (a friendly, retryable
 // condition) rather than a hard 500.
 var (
@@ -151,24 +168,30 @@ func (r *Registry) CloseGame(code string) error {
 
 func (gm *Manager) AddPlayer(id PlayerId) error {
 	gm.mux.Lock()
-	defer gm.mux.Unlock()
 
 	if strings.TrimSpace(string(id)) == "" {
+		gm.mux.Unlock()
 		return errors.New("invalid player id")
 	}
 
 	if slices.Contains(gm.players, id) {
+		gm.mux.Unlock()
 		return errors.New("cannot add player. id already exists")
 	}
 	gm.players = append(gm.players, id)
+	roster := rosterLocked(gm.players)
 
+	gm.mux.Unlock()
+
+	// Broadcast the new roster outside the lock (mirrors StartRound) so hosts
+	// see who has joined live — before any note is submitted.
+	gm.hub.broadcast(event{Type: "players", Players: roster})
 	log.Printf("Added player: %+v\n", id)
 	return nil
 }
 
 func (gm *Manager) RemovePlayer(id PlayerId) error {
 	gm.mux.Lock()
-	defer gm.mux.Unlock()
 
 	for word, playerId := range gm.wordTiles {
 		if playerId == id {
@@ -178,11 +201,17 @@ func (gm *Manager) RemovePlayer(id PlayerId) error {
 
 	index := slices.Index(gm.players, id)
 	if index == -1 {
+		gm.mux.Unlock()
 		return errors.New("cannot remove player. id does not exist")
 	}
 	gm.players = slices.Delete(gm.players, index, index+1)
 	delete(gm.submittedThisRound, id)
+	roster := rosterLocked(gm.players)
 
+	gm.mux.Unlock()
+
+	// Broadcast the updated roster outside the lock (mirrors StartRound / AddPlayer).
+	gm.hub.broadcast(event{Type: "players", Players: roster})
 	log.Printf("Removed player: %+v\n", id)
 	return nil
 }
@@ -359,6 +388,14 @@ func (gm *Manager) GetPlayers() []PlayerId {
 	gm.mux.Lock()
 	defer gm.mux.Unlock()
 	return gm.players
+}
+
+// Roster returns the current players as wire-shaped Player values (id today,
+// score later). Used by GET /players and the "players" event snapshot.
+func (gm *Manager) Roster() []Player {
+	gm.mux.RLock()
+	defer gm.mux.RUnlock()
+	return rosterLocked(gm.players)
 }
 
 func (gm *Manager) GetSubmittedNotes() []string {

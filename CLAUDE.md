@@ -54,15 +54,16 @@ Player IDs only need to be unique **within a game**.
 **Request/response flow** (every route is game-scoped):
 - `POST /games` — manager starts a game; returns `{code}`
 - `DELETE /games/:code` — manager ends a game (open, no auth)
-- `GET /games/:code` — returns `{code, players}`; used to validate a join
-- `POST /games/:code/players` → `{id}` — player joins (id unique within the game)
-- `DELETE /games/:code/players/:id` — player leaves
+- `GET /games/:code` — returns `{code, players}` (players as bare id strings); used to validate a join
+- `GET /games/:code/players` — returns the roster `{players: [{id}]}` (players as **objects**, so a per-player `score` can be added later without a breaking change); used by the host to show who has joined
+- `POST /games/:code/players` → `{id}` — player joins (id unique within the game); broadcasts the updated `players` roster
+- `DELETE /games/:code/players/:id` — player leaves; broadcasts the updated `players` roster
 - `POST /games/:code/draw` → `{id, count}` — draws `count` available tiles, returns the player's **entire current pile** (not just new tiles)
 - `GET /games/:code/players/:id/tiles` — the player's current pile (used after submit to refresh)
 - `POST /games/:code/submit` → `{id, note: ["42|banana", ...]}` — validates all tiles belong to the player and the round rules, then atomically releases them and appends the human-readable note to `submittedNotes`; **409** if no active round or already answered this round
 - `POST /games/:code/rounds` — manager draws the next prompt; returns `{round, prompt}` (201)
 - `GET /games/:code/round` — current `{round, prompt}` (round 0 before any draw)
-- `GET /games/:code/events` — **WebSocket** upgrade; pushes `round_started {round,prompt}` (also a snapshot on connect), `submission {round,count,total}`, and `game_ended {}`
+- `GET /games/:code/events` — **WebSocket** upgrade; pushes `round_started {round,prompt}` (also a snapshot on connect), `submission {round,count,total}`, `players {players:[{id}]}` (roster on join/leave, also a snapshot on connect when non-empty), and `game_ended {}`
 - `GET /games/:code/submitted-notes` — manager reads the note board (notes are cleared server-side by `StartRound`, so there is no manual clear route)
 
 A handler that can't find `:code` returns **404** (`resolveGame` in `router.go`). `router.go`

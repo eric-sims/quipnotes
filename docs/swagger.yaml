@@ -30,6 +30,18 @@ definitions:
           type: string
         type: array
     type: object
+  game.Player:
+    properties:
+      id:
+        type: string
+    type: object
+  game.PlayersResponse:
+    properties:
+      players:
+        items:
+          $ref: '#/definitions/game.Player'
+        type: array
+    type: object
   game.RoundResponse:
     properties:
       prompt:
@@ -167,6 +179,27 @@ paths:
             $ref: '#/definitions/game.ErrorResponse'
       summary: Game event stream (WebSocket)
   /games/{code}/players:
+    get:
+      description: Returns a game's current players (roster) as objects. Used by the
+        host to show who has joined; forward-compatible with per-player scoring.
+      parameters:
+      - description: game code
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/game.PlayersResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+      summary: Game roster
     post:
       consumes:
       - application/json

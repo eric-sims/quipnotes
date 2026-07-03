@@ -14,13 +14,15 @@ import (
 // omitempty so each event type only carries what it needs:
 //   - round_started: {round, prompt}
 //   - submission:    {round, count, total}
+//   - players:       {players: [{id}]}  (roster; also a snapshot on connect)
 //   - game_ended:    {}
 type event struct {
-	Type   string `json:"type"`
-	Round  int    `json:"round,omitempty"`
-	Prompt string `json:"prompt,omitempty"`
-	Count  int    `json:"count,omitempty"`
-	Total  int    `json:"total,omitempty"`
+	Type    string   `json:"type"`
+	Round   int      `json:"round,omitempty"`
+	Prompt  string   `json:"prompt,omitempty"`
+	Count   int      `json:"count,omitempty"`
+	Total   int      `json:"total,omitempty"`
+	Players []Player `json:"players,omitempty"`
 }
 
 // wsClient is one connected subscriber. The hub writes serialized events to
@@ -140,6 +142,17 @@ func serveEvents(gm *Manager, w http.ResponseWriter, r *http.Request) {
 	// the active prompt without waiting for the next broadcast.
 	if round, prompt := gm.CurrentRound(); round > 0 {
 		if payload, err := json.Marshal(event{Type: "round_started", Round: round, Prompt: prompt}); err == nil {
+			select {
+			case client.send <- payload:
+			default:
+			}
+		}
+	}
+
+	// Also snapshot the current roster so a connecting/reconnecting host sees who
+	// has already joined without waiting for the next join/leave broadcast.
+	if roster := gm.Roster(); len(roster) > 0 {
+		if payload, err := json.Marshal(event{Type: "players", Players: roster}); err == nil {
 			select {
 			case client.send <- payload:
 			default:
