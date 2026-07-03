@@ -57,6 +57,7 @@ func main() {
 
 	// Game-scoped player endpoints.
 	r.GET("/games/:code", game.GetGameInfo)
+	r.GET("/games/:code/players", game.GetPlayers)
 	r.POST("/games/:code/players", game.AddPlayer)
 	r.DELETE("/games/:code/players/:id", game.DeletePlayer)
 	r.GET("/games/:code/players/:id/tiles", game.GetTiles)

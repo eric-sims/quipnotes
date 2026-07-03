@@ -174,6 +174,36 @@ const docTemplate = `{
             }
         },
         "/games/{code}/players": {
+            "get": {
+                "description": "Returns a game's current players (roster) as objects. Used by the host to show who has joined; forward-compatible with per-player scoring.",
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Game roster",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "game code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/game.PlayersResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    }
+                }
+            },
             "post": {
                 "description": "Adds a player to a game. The playerId must be unique within the game.",
                 "consumes": [
@@ -530,6 +560,25 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "type": "string"
+                    }
+                }
+            }
+        },
+        "game.Player": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                }
+            }
+        },
+        "game.PlayersResponse": {
+            "type": "object",
+            "properties": {
+                "players": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/game.Player"
                     }
                 }
             }

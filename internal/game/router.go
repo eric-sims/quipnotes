@@ -30,6 +30,12 @@ type GameInfoResponse struct {
 	Players []PlayerId `json:"players"`
 }
 
+// PlayersResponse is the game roster. Each player is an object (not a bare id
+// string) so a per-player score can be added later without a breaking change.
+type PlayersResponse struct {
+	Players []Player `json:"players"`
+}
+
 // RoundResponse describes the active round: its number (0 before the first
 // prompt is drawn) and prompt text.
 type RoundResponse struct {
@@ -95,6 +101,22 @@ func GetGameInfo(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, GameInfoResponse{Code: g.Code(), Players: g.GetPlayers()})
+}
+
+// GetPlayers godoc
+//	@Summary		Game roster
+//	@Description	Returns a game's current players (roster) as objects. Used by the host to show who has joined; forward-compatible with per-player scoring.
+//	@Router			/games/{code}/players [get]
+//	@Produce		json
+//	@Param			code	path		string	true	"game code"
+//	@Failure		404		{object}	ErrorResponse
+//	@Success		200		{object}	PlayersResponse
+func GetPlayers(c *gin.Context) {
+	g, ok := resolveGame(c)
+	if !ok {
+		return
+	}
+	c.JSON(http.StatusOK, PlayersResponse{Players: g.Roster()})
 }
 
 // StartRound godoc
