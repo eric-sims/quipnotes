@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- Build stage ----
-FROM golang:1.23.2-alpine AS build
+FROM golang:1.25-alpine AS build
 WORKDIR /app
 
 # Cache module downloads separately from the source for faster rebuilds.
