@@ -194,7 +194,7 @@ func TestSubmitRoundTrip(t *testing.T) {
 	}
 
 	// A note only counts against an active round.
-	if _, _, err := g.StartRound(); err != nil {
+	if _, err := g.StartRound(); err != nil {
 		t.Fatalf("StartRound: %v", err)
 	}
 
@@ -237,7 +237,7 @@ func TestSubmitOncePerRound(t *testing.T) {
 	if err := g.AddPlayer("alice"); err != nil {
 		t.Fatalf("AddPlayer: %v", err)
 	}
-	if _, _, err := g.StartRound(); err != nil {
+	if _, err := g.StartRound(); err != nil {
 		t.Fatalf("StartRound: %v", err)
 	}
 
@@ -254,7 +254,7 @@ func TestSubmitOncePerRound(t *testing.T) {
 	}
 
 	// A new round re-enables submission and clears the previous notes.
-	if _, _, err := g.StartRound(); err != nil {
+	if _, err := g.StartRound(); err != nil {
 		t.Fatalf("StartRound 2: %v", err)
 	}
 	if notes := g.GetSubmittedNotes(); len(notes) != 0 {
@@ -271,7 +271,7 @@ func TestSubmitPreservesBreaks(t *testing.T) {
 	if err := g.AddPlayer("alice"); err != nil {
 		t.Fatalf("AddPlayer: %v", err)
 	}
-	if _, _, err := g.StartRound(); err != nil {
+	if _, err := g.StartRound(); err != nil {
 		t.Fatalf("StartRound: %v", err)
 	}
 	drawn, err := g.DrawWordTiles(2, "alice")
@@ -289,8 +289,8 @@ func TestSubmitPreservesBreaks(t *testing.T) {
 	if len(notes) != 1 {
 		t.Fatalf("expected 1 note, got %d", len(notes))
 	}
-	if !slices.Equal(notes[0], note) {
-		t.Fatalf("expected stored note %v, got %v", note, notes[0])
+	if !slices.Equal(notes[0].Tokens, note) {
+		t.Fatalf("expected stored note %v, got %v", note, notes[0].Tokens)
 	}
 	// Breaks release no tile, but both real tiles return to the pool.
 	if held, _ := g.GetDrawnWordTiles("alice"); len(held) != 0 {
@@ -304,7 +304,7 @@ func TestSubmitNormalizesBreaks(t *testing.T) {
 	if err := g.AddPlayer("alice"); err != nil {
 		t.Fatalf("AddPlayer: %v", err)
 	}
-	if _, _, err := g.StartRound(); err != nil {
+	if _, err := g.StartRound(); err != nil {
 		t.Fatalf("StartRound: %v", err)
 	}
 	drawn, _ := g.DrawWordTiles(2, "alice")
@@ -316,7 +316,7 @@ func TestSubmitNormalizesBreaks(t *testing.T) {
 	}
 
 	want := []string{drawn[0], BreakToken, drawn[1]}
-	got := g.GetSubmittedNotes()[0]
+	got := g.GetSubmittedNotes()[0].Tokens
 	if !slices.Equal(got, want) {
 		t.Fatalf("expected normalized note %v, got %v", want, got)
 	}
@@ -328,7 +328,7 @@ func TestSubmitRejectsBreaksOnlyNote(t *testing.T) {
 	if err := g.AddPlayer("alice"); err != nil {
 		t.Fatalf("AddPlayer: %v", err)
 	}
-	if _, _, err := g.StartRound(); err != nil {
+	if _, err := g.StartRound(); err != nil {
 		t.Fatalf("StartRound: %v", err)
 	}
 	// Hold a tile so we can confirm the rejected submit consumes nothing.
@@ -349,14 +349,14 @@ func TestStartRoundAdvancesAndWraps(t *testing.T) {
 	n := len(samplePrompts())
 	seen := make([]string, 0, n)
 	for i := 1; i <= n; i++ {
-		round, prompt, err := g.StartRound()
+		state, err := g.StartRound()
 		if err != nil {
 			t.Fatalf("StartRound %d: %v", i, err)
 		}
-		if round != i {
-			t.Fatalf("expected round %d, got %d", i, round)
+		if state.Round != i {
+			t.Fatalf("expected round %d, got %d", i, state.Round)
 		}
-		seen = append(seen, prompt)
+		seen = append(seen, state.Prompt)
 	}
 
 	// The deck is a full copy: every prompt appears exactly once before wrap.
@@ -370,16 +370,16 @@ func TestStartRoundAdvancesAndWraps(t *testing.T) {
 	}
 
 	// Exhausting the deck reshuffles rather than erroring.
-	round, prompt, err := g.StartRound()
+	state, err := g.StartRound()
 	if err != nil {
 		t.Fatalf("StartRound after exhaustion: %v", err)
 	}
-	if round != n+1 || prompt == "" {
-		t.Fatalf("expected wrap to round %d with a prompt, got round %d prompt %q", n+1, round, prompt)
+	if state.Round != n+1 || state.Prompt == "" {
+		t.Fatalf("expected wrap to round %d with a prompt, got round %d prompt %q", n+1, state.Round, state.Prompt)
 	}
 
-	if gotRound, gotPrompt := g.CurrentRound(); gotRound != round || gotPrompt != prompt {
-		t.Fatalf("CurrentRound mismatch: got (%d,%q) want (%d,%q)", gotRound, gotPrompt, round, prompt)
+	if got := g.CurrentRoundState(); got.Round != state.Round || got.Prompt != state.Prompt {
+		t.Fatalf("CurrentRoundState mismatch: got (%d,%q) want (%d,%q)", got.Round, got.Prompt, state.Round, state.Prompt)
 	}
 }
 
@@ -395,8 +395,8 @@ func TestPromptDeckOrderVariesBetweenGames(t *testing.T) {
 		g, _ := r.CreateGame()
 		out := make([]string, len(prompts))
 		for i := range prompts {
-			_, p, _ := g.StartRound()
-			out[i] = p
+			st, _ := g.StartRound()
+			out[i] = st.Prompt
 		}
 		return out
 	}

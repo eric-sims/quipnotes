@@ -11,18 +11,25 @@ import (
 )
 
 // event is a server->client message pushed over the WebSocket. Fields are
-// omitempty so each event type only carries what it needs:
-//   - round_started: {round, prompt}
-//   - submission:    {round, count, total}
-//   - players:       {players: [{id}]}  (roster; also a snapshot on connect)
-//   - game_ended:    {}
+// omitempty so each event type only carries what it needs (note ids are
+// 1-based precisely so a zero value can be omitted):
+//   - round_started:   {round, prompt, judgeId}  (judgeId "" = judge-less round)
+//   - submission:      {round, count, total}     (total excludes the judge)
+//   - judging_ready:   {round}                   (submissions closed; judge may flip/pick)
+//   - note_flipped:    {round, noteId}
+//   - favorite_picked: {round, noteId, winnerId}
+//   - players:         {players: [{id, score}]}  (roster; also a snapshot on connect)
+//   - game_ended:      {}
 type event struct {
-	Type    string   `json:"type"`
-	Round   int      `json:"round,omitempty"`
-	Prompt  string   `json:"prompt,omitempty"`
-	Count   int      `json:"count,omitempty"`
-	Total   int      `json:"total,omitempty"`
-	Players []Player `json:"players,omitempty"`
+	Type     string   `json:"type"`
+	Round    int      `json:"round,omitempty"`
+	Prompt   string   `json:"prompt,omitempty"`
+	JudgeId  PlayerId `json:"judgeId,omitempty"`
+	Count    int      `json:"count,omitempty"`
+	Total    int      `json:"total,omitempty"`
+	NoteId   int      `json:"noteId,omitempty"`
+	WinnerId PlayerId `json:"winnerId,omitempty"`
+	Players  []Player `json:"players,omitempty"`
 }
 
 // wsClient is one connected subscriber. The hub writes serialized events to
@@ -138,10 +145,9 @@ func serveEvents(gm *Manager, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Immediately send the current round so a late joiner / phone refresh gets
-	// the active prompt without waiting for the next broadcast.
-	if round, prompt := gm.CurrentRound(); round > 0 {
-		if payload, err := json.Marshal(event{Type: "round_started", Round: round, Prompt: prompt}); err == nil {
+	// snapshot queues an event straight to this client (not a broadcast).
+	snapshot := func(e event) {
+		if payload, err := json.Marshal(e); err == nil {
 			select {
 			case client.send <- payload:
 			default:
@@ -149,15 +155,26 @@ func serveEvents(gm *Manager, w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Also snapshot the current roster so a connecting/reconnecting host sees who
-	// has already joined without waiting for the next join/leave broadcast.
-	if roster := gm.Roster(); len(roster) > 0 {
-		if payload, err := json.Marshal(event{Type: "players", Players: roster}); err == nil {
-			select {
-			case client.send <- payload:
-			default:
-			}
+	// Immediately replay the round's lifecycle so a late joiner / phone refresh
+	// catches up without waiting for the next broadcast: the active prompt (and
+	// judge), then — if the round has progressed that far — that judging is open
+	// and the picked favorite. Flip state is not replayed; clients re-fetch the
+	// note board when they learn judging is open.
+	if state := gm.CurrentRoundState(); state.Round > 0 {
+		snapshot(event{Type: "round_started", Round: state.Round, Prompt: state.Prompt, JudgeId: state.JudgeId})
+		if state.JudgingOpen {
+			snapshot(event{Type: "judging_ready", Round: state.Round})
 		}
+		if state.WinnerId != "" {
+			snapshot(event{Type: "favorite_picked", Round: state.Round, NoteId: state.FavoriteNote, WinnerId: state.WinnerId})
+		}
+	}
+
+	// Also snapshot the current roster (with scores) so a connecting or
+	// reconnecting host sees who has already joined without waiting for the
+	// next join/leave broadcast.
+	if roster := gm.Roster(); len(roster) > 0 {
+		snapshot(event{Type: "players", Players: roster})
 	}
 
 	go writePump(conn, client)

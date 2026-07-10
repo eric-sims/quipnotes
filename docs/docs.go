@@ -173,6 +173,139 @@ const docTemplate = `{
                 }
             }
         },
+        "/games/{code}/favorite": {
+            "post": {
+                "description": "Records the round's winning note (by 1-based id): its author scores a point and favorite_picked is broadcast. One favorite per round; the note must be face-up.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "summary": "Picks the judge's favorite note",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "game code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "the winning note id",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/game.PickFavoriteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/game.PickFavoriteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/games/{code}/judging": {
+            "post": {
+                "description": "Closes submissions and lets the judge start flipping notes before every player has answered (judging opens automatically when the last eligible player submits). Requires an active round with a judge and at least one note.",
+                "summary": "Opens judging early (judge's override)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "game code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/games/{code}/notes/{noteId}/flip": {
+            "post": {
+                "description": "Turns the note with the given 1-based id face-up and broadcasts note_flipped so every screen flips in sync. One-way and idempotent. Locked until judging opens, except in judge-less rounds.",
+                "summary": "Flips a note face-up",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "game code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "1-based note id",
+                        "name": "noteId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/games/{code}/players": {
             "get": {
                 "description": "Returns a game's current players (roster) as objects. Used by the host to show who has joined; forward-compatible with per-player scoring.",
@@ -351,7 +484,7 @@ const docTemplate = `{
         },
         "/games/{code}/round": {
             "get": {
-                "description": "Returns the active round number and prompt (round 0 before the first prompt is drawn). Used for polling and reconnect.",
+                "description": "Returns the active round's full state: number (0 before the first prompt is drawn), prompt, judge, judging/submission progress, and the picked favorite. Used for polling and reconnect.",
                 "produces": [
                     "application/json"
                 ],
@@ -369,7 +502,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/game.RoundResponse"
+                            "$ref": "#/definitions/game.RoundState"
                         }
                     },
                     "404": {
@@ -383,7 +516,7 @@ const docTemplate = `{
         },
         "/games/{code}/rounds": {
             "post": {
-                "description": "Pops the next prompt off the game's shuffled deck, begins a new round, and clears the previous round's notes. Driven by the manager (host).",
+                "description": "Pops the next prompt off the game's shuffled deck, begins a new round (selecting its judge), and clears the previous round's notes. Driven by the manager (host).",
                 "produces": [
                     "application/json"
                 ],
@@ -401,7 +534,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/game.RoundResponse"
+                            "$ref": "#/definitions/game.RoundState"
                         }
                     },
                     "404": {
@@ -477,7 +610,7 @@ const docTemplate = `{
         },
         "/games/{code}/submitted-notes": {
             "get": {
-                "description": "Returns the submitted notes for the game. Each note is an ordered token list: tile keys (\"42|banana\") plus \"\\n\" (BreakToken) markers for line breaks.",
+                "description": "Returns this round's note board in its shared shuffled display order. Each note carries a stable 1-based id, its ordered token list (tile keys \"42|banana\" plus \"\\n\" line breaks), and whether it is face-up. Authors are withheld until the favorite is picked.",
                 "produces": [
                     "application/json"
                 ],
@@ -495,16 +628,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "array",
-                                "items": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "string"
-                                    }
-                                }
-                            }
+                            "$ref": "#/definitions/game.NotesResponse"
                         }
                     },
                     "404": {
@@ -567,11 +691,58 @@ const docTemplate = `{
                 }
             }
         },
+        "game.NoteView": {
+            "type": "object",
+            "properties": {
+                "flipped": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "tokens": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "game.NotesResponse": {
+            "type": "object",
+            "properties": {
+                "notes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/game.NoteView"
+                    }
+                }
+            }
+        },
+        "game.PickFavoriteRequest": {
+            "type": "object",
+            "properties": {
+                "noteId": {
+                    "type": "integer"
+                }
+            }
+        },
+        "game.PickFavoriteResponse": {
+            "type": "object",
+            "properties": {
+                "winnerId": {
+                    "type": "string"
+                }
+            }
+        },
         "game.Player": {
             "type": "object",
             "properties": {
                 "id": {
                     "type": "string"
+                },
+                "score": {
+                    "type": "integer"
                 }
             }
         },
@@ -586,14 +757,35 @@ const docTemplate = `{
                 }
             }
         },
-        "game.RoundResponse": {
+        "game.RoundState": {
             "type": "object",
             "properties": {
+                "count": {
+                    "description": "notes submitted this round",
+                    "type": "integer"
+                },
+                "favoriteNoteId": {
+                    "description": "0 = none picked yet",
+                    "type": "integer"
+                },
+                "judgeId": {
+                    "type": "string"
+                },
+                "judgingOpen": {
+                    "type": "boolean"
+                },
                 "prompt": {
                     "type": "string"
                 },
                 "round": {
                     "type": "integer"
+                },
+                "total": {
+                    "description": "players eligible to submit (judge excluded)",
+                    "type": "integer"
+                },
+                "winnerId": {
+                    "type": "string"
                 }
             }
         },

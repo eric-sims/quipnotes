@@ -69,6 +69,12 @@ func main() {
 	r.GET("/games/:code/round", game.GetRound)     // current round (poll / reconnect)
 	r.GET("/games/:code/events", game.ServeEvents) // WebSocket push channel
 
+	// Judging: the judge opens judging early, flips notes face-up, and picks
+	// the round's favorite (scoring its author a point).
+	r.POST("/games/:code/judging", game.OpenJudging)
+	r.POST("/games/:code/notes/:noteId/flip", game.FlipNote)
+	r.POST("/games/:code/favorite", game.PickFavorite)
+
 	// Manager (host) note board for a game.
 	r.GET("/games/:code/submitted-notes", game.GetSubmittedNotes)
 
