@@ -30,10 +30,40 @@ definitions:
           type: string
         type: array
     type: object
+  game.NoteView:
+    properties:
+      flipped:
+        type: boolean
+      id:
+        type: integer
+      tokens:
+        items:
+          type: string
+        type: array
+    type: object
+  game.NotesResponse:
+    properties:
+      notes:
+        items:
+          $ref: '#/definitions/game.NoteView'
+        type: array
+    type: object
+  game.PickFavoriteRequest:
+    properties:
+      noteId:
+        type: integer
+    type: object
+  game.PickFavoriteResponse:
+    properties:
+      winnerId:
+        type: string
+    type: object
   game.Player:
     properties:
       id:
         type: string
+      score:
+        type: integer
     type: object
   game.PlayersResponse:
     properties:
@@ -42,12 +72,27 @@ definitions:
           $ref: '#/definitions/game.Player'
         type: array
     type: object
-  game.RoundResponse:
+  game.RoundState:
     properties:
+      count:
+        description: notes submitted this round
+        type: integer
+      favoriteNoteId:
+        description: 0 = none picked yet
+        type: integer
+      judgeId:
+        type: string
+      judgingOpen:
+        type: boolean
       prompt:
         type: string
       round:
         type: integer
+      total:
+        description: players eligible to submit (judge excluded)
+        type: integer
+      winnerId:
+        type: string
     type: object
   game.SubmitNoteRequest:
     properties:
@@ -181,6 +226,100 @@ paths:
           schema:
             $ref: '#/definitions/game.ErrorResponse'
       summary: Game event stream (WebSocket)
+  /games/{code}/favorite:
+    post:
+      consumes:
+      - application/json
+      description: 'Records the round''s winning note (by 1-based id): its author
+        scores a point and favorite_picked is broadcast. One favorite per round; the
+        note must be face-up.'
+      parameters:
+      - description: game code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: the winning note id
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/game.PickFavoriteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/game.PickFavoriteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+      summary: Picks the judge's favorite note
+  /games/{code}/judging:
+    post:
+      description: Closes submissions and lets the judge start flipping notes before
+        every player has answered (judging opens automatically when the last eligible
+        player submits). Requires an active round with a judge and at least one note.
+      parameters:
+      - description: game code
+        in: path
+        name: code
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+      summary: Opens judging early (judge's override)
+  /games/{code}/notes/{noteId}/flip:
+    post:
+      description: Turns the note with the given 1-based id face-up and broadcasts
+        note_flipped so every screen flips in sync. One-way and idempotent. Locked
+        until judging opens, except in judge-less rounds.
+      parameters:
+      - description: game code
+        in: path
+        name: code
+        required: true
+        type: string
+      - description: 1-based note id
+        in: path
+        name: noteId
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+      summary: Flips a note face-up
   /games/{code}/players:
     get:
       description: Returns a game's current players (roster) as objects. Used by the
@@ -302,8 +441,9 @@ paths:
       summary: Gets Drawn Tiles
   /games/{code}/round:
     get:
-      description: Returns the active round number and prompt (round 0 before the
-        first prompt is drawn). Used for polling and reconnect.
+      description: 'Returns the active round''s full state: number (0 before the first
+        prompt is drawn), prompt, judge, judging/submission progress, and the picked
+        favorite. Used for polling and reconnect.'
       parameters:
       - description: game code
         in: path
@@ -316,7 +456,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/game.RoundResponse'
+            $ref: '#/definitions/game.RoundState'
         "404":
           description: Not Found
           schema:
@@ -325,7 +465,8 @@ paths:
   /games/{code}/rounds:
     post:
       description: Pops the next prompt off the game's shuffled deck, begins a new
-        round, and clears the previous round's notes. Driven by the manager (host).
+        round (selecting its judge), and clears the previous round's notes. Driven
+        by the manager (host).
       parameters:
       - description: game code
         in: path
@@ -338,7 +479,7 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/game.RoundResponse'
+            $ref: '#/definitions/game.RoundState'
         "404":
           description: Not Found
           schema:
@@ -388,9 +529,10 @@ paths:
       summary: Turn in Note
   /games/{code}/submitted-notes:
     get:
-      description: 'Returns the submitted notes for the game. Each note is an ordered
-        token list: tile keys ("42|banana") plus "\n" (BreakToken) markers for line
-        breaks.'
+      description: Returns this round's note board in its shared shuffled display
+        order. Each note carries a stable 1-based id, its ordered token list (tile
+        keys "42|banana" plus "\n" line breaks), and whether it is face-up. Authors
+        are withheld until the favorite is picked.
       parameters:
       - description: game code
         in: path
@@ -403,13 +545,7 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties:
-              items:
-                items:
-                  type: string
-                type: array
-              type: array
-            type: object
+            $ref: '#/definitions/game.NotesResponse'
         "404":
           description: Not Found
           schema:

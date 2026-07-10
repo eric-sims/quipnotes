@@ -34,18 +34,36 @@ Each `game.Manager` is **one game** and holds:
 - `code string` — its 4-digit code
 - `players []PlayerId` — players who joined this game
 - `wordTiles map[string]PlayerId` — tile key (`"42|banana"`) → owning player ID, or `""` if available
-- `submittedNotes [][]string` — the current round's ransom notes, each an ordered token list of tile keys plus `"\n"` (`BreakToken`) line breaks (cleared each round)
+- `submittedNotes []submittedNote` — the current round's ransom notes (cleared each round). Each holds its ordered token list (tile keys plus `"\n"` `BreakToken` line breaks), its **author** (server-side only, for scoring), a **flipped** flag, and a random **sortKey** so every screen shows the board in the same shuffled order without leaking submission order
 - `promptDeck []string` + `promptCursor int` — this game's shuffled prompt deck and next index
 - `round int` + `currentPrompt string` — active round (0 = none) and its prompt
 - `submittedThisRound map[PlayerId]bool` — who has answered this round (reset each round)
+- `scores map[PlayerId]int` + `hasJudged map[PlayerId]bool` — running scores (survive rounds and rejoins) and the judge-rotation cycle
+- `judge PlayerId`, `judgingOpen bool`, `favoriteNote int`, `winner PlayerId` — the round's judging state (favoriteNote is a 1-based note id, 0 = none)
 - `hub *hub` — this game's WebSocket subscribers (see `hub.go`)
 - `mux sync.RWMutex` — guards this game's fields
 
 **Rounds:** `StartRound()` pops the next prompt (reshuffling when the deck is exhausted so a
-game never runs out), increments `round`, clears `submittedThisRound` and `submittedNotes`,
-and broadcasts `round_started`. `Submit` returns `ErrNoActiveRound` / `ErrAlreadySubmitted`
-(mapped to **409** in `router.go`) to enforce one note per round. `words.go` loads words,
-`prompts.go` loads prompts, `hub.go` holds the WebSocket hub + connection pumps.
+game never runs out), increments `round`, clears `submittedThisRound`, `submittedNotes` and
+the judging state, **selects the round's judge**, and broadcasts `round_started`. `Submit`
+returns `ErrNoActiveRound` / `ErrAlreadySubmitted` / `ErrJudgeCannotSubmit` /
+`ErrJudgingStarted` (all mapped to **409** via `isConflict` in `router.go`) to enforce one
+note per round, that the judge doesn't answer, and that submissions close once judging
+opens. `words.go` loads words, `prompts.go` loads prompts, `hub.go` holds the WebSocket
+hub + connection pumps; judging tests live in `judging_test.go`.
+
+**Judging & scoring:** each round one player is the **judge** — `pickJudgeLocked` takes the
+first player (in join order) who hasn't judged this rotation cycle, resetting the cycle once
+everyone has, so every player judges once before anyone judges again. A round that starts
+with **fewer than 2 players gets no judge** (`judge == ""`) and plays like the pre-judging
+game (everyone may submit; the host can flip notes freely). Judging **opens automatically**
+when every non-judge player has submitted (`maybeOpenJudgingLocked`, also re-checked when a
+straggler leaves), or the judge **forces it** via `OpenJudging` (needs ≥1 note); open judging
+closes submissions. The judge (or host) then **flips notes face-up** (`FlipNote` — one-way,
+idempotent, broadcasts `note_flipped`) and **picks a favorite** (`PickFavorite` — the note
+must be face-up, one pick per round; the author scores a point and `favorite_picked` plus a
+refreshed scored `players` roster are broadcast). If the judge leaves mid-round the next
+player in rotation takes over and `round_started` is re-broadcast with the new `judgeId`.
 
 Player IDs only need to be unique **within a game**.
 
@@ -55,16 +73,19 @@ Player IDs only need to be unique **within a game**.
 - `POST /games` — manager starts a game; returns `{code}`
 - `DELETE /games/:code` — manager ends a game (open, no auth)
 - `GET /games/:code` — returns `{code, players}` (players as bare id strings); used to validate a join
-- `GET /games/:code/players` — returns the roster `{players: [{id}]}` (players as **objects**, so a per-player `score` can be added later without a breaking change); used by the host to show who has joined
+- `GET /games/:code/players` — returns the roster `{players: [{id, score}]}`; used by the host to show who has joined and the live scoreboard
 - `POST /games/:code/players` → `{id}` — player joins (id unique within the game); broadcasts the updated `players` roster
-- `DELETE /games/:code/players/:id` — player leaves; broadcasts the updated `players` roster
+- `DELETE /games/:code/players/:id` — player leaves; broadcasts the updated `players` roster (and may reassign the judge / open judging, see above)
 - `POST /games/:code/draw` → `{id, count}` — draws `count` available tiles, returns the player's **entire current pile** (not just new tiles)
 - `GET /games/:code/players/:id/tiles` — the player's current pile (used after submit to refresh)
-- `POST /games/:code/submit` → `{id, note: ["42|banana", "\n", ...]}` — the ordered token list (tiles plus optional `"\n"` line breaks); validates all tiles belong to the player and the round rules, then atomically releases them and appends the normalized token list to `submittedNotes`; **409** if no active round or already answered this round
-- `POST /games/:code/rounds` — manager draws the next prompt; returns `{round, prompt}` (201)
-- `GET /games/:code/round` — current `{round, prompt}` (round 0 before any draw)
-- `GET /games/:code/events` — **WebSocket** upgrade; pushes `round_started {round,prompt}` (also a snapshot on connect), `submission {round,count,total}`, `players {players:[{id}]}` (roster on join/leave, also a snapshot on connect when non-empty), and `game_ended {}`
-- `GET /games/:code/submitted-notes` → `{notes: [[token,...], ...]}` — manager reads the note board (each note an ordered token list; notes are cleared server-side by `StartRound`, so there is no manual clear route)
+- `POST /games/:code/submit` → `{id, note: ["42|banana", "\n", ...]}` — the ordered token list (tiles plus optional `"\n"` line breaks); validates all tiles belong to the player and the round rules, then atomically releases them and appends the normalized token list to `submittedNotes`; **409** if no active round, already answered, submitter is the judge, or judging has opened
+- `POST /games/:code/rounds` — manager draws the next prompt; returns the full `RoundState` (201)
+- `GET /games/:code/round` — current `RoundState`: `{round, prompt, judgeId, judgingOpen, count, total, favoriteNoteId, winnerId}` (round 0 / zero values before any draw; `total` excludes the judge)
+- `POST /games/:code/judging` — judge force-opens judging early (auto-opens when the last eligible player submits); **409** if no round/judge/notes or already open
+- `POST /games/:code/notes/:noteId/flip` — flips a note face-up by its 1-based id (one-way, idempotent); **409** until judging opens (except judge-less rounds), **400** unknown id
+- `POST /games/:code/favorite` → `{noteId}` — judge picks the winning note; returns `{winnerId}` and scores the author a point; **409** if judging not open, already picked, or the note is face-down
+- `GET /games/:code/events` — **WebSocket** upgrade; pushes `round_started {round,prompt,judgeId}`, `submission {round,count,total}`, `judging_ready {round}`, `note_flipped {round,noteId}`, `favorite_picked {round,noteId,winnerId}`, `players {players:[{id,score}]}` (roster on join/leave and after a pick), and `game_ended {}`. On connect the round's lifecycle is **replayed as a snapshot** (`round_started`, then `judging_ready` / `favorite_picked` if the round got that far, plus the roster) — flip state is not replayed; clients re-fetch the note board when judging is open
+- `GET /games/:code/submitted-notes` → `{notes: [{id, tokens, flipped}, ...]}` — the note board in its shared shuffled display order (per-round random sort keys; note `id`s are 1-based and stable; authors withheld until the reveal; notes are cleared server-side by `StartRound`, so there is no manual clear route)
 
 A handler that can't find `:code` returns **404** (`resolveGame` in `router.go`). `router.go`
 holds all Gin handlers (with Swagger annotations) and the request/response structs. Pure
