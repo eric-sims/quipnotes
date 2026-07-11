@@ -516,7 +516,10 @@ const docTemplate = `{
         },
         "/games/{code}/rounds": {
             "post": {
-                "description": "Pops the next prompt off the game's shuffled deck, begins a new round (selecting its judge), and clears the previous round's notes. Driven by the manager (host).",
+                "description": "Pops the next prompt off the game's shuffled deck, begins a new round (selecting its judge), and clears the previous round's notes. With no body it is the manager's (host) unconditional draw. A player may advance instead by sending {id, round}: id must be the current judge (any joined player at round 0 / in a judge-less round) and round must be the current round number.",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -528,6 +531,14 @@ const docTemplate = `{
                         "name": "code",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "player advancing the round (omit for the host)",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/game.StartRoundRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -537,8 +548,20 @@ const docTemplate = `{
                             "$ref": "#/definitions/game.RoundState"
                         }
                     },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/game.ErrorResponse"
                         }
@@ -786,6 +809,17 @@ const docTemplate = `{
                 },
                 "winnerId": {
                     "type": "string"
+                }
+            }
+        },
+        "game.StartRoundRequest": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "round": {
+                    "type": "integer"
                 }
             }
         },

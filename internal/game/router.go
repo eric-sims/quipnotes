@@ -51,6 +51,7 @@ func isConflict(err error) bool {
 		ErrNoActiveRound, ErrAlreadySubmitted, ErrJudgeCannotSubmit,
 		ErrJudgingStarted, ErrNoJudge, ErrJudgingAlreadyOpen,
 		ErrJudgingNotOpen, ErrNoNotesYet, ErrFavoritePicked, ErrNoteNotFlipped,
+		ErrNotTheJudge, ErrRoundAdvanced,
 	} {
 		if errors.Is(err, conflict) {
 			return true
@@ -139,14 +140,28 @@ func GetPlayers(c *gin.Context) {
 	c.JSON(http.StatusOK, PlayersResponse{Players: g.Roster()})
 }
 
+// StartRoundRequest is the optional body of POST /rounds. The manager (host)
+// sends no body and starts rounds unconditionally. A player sends their id
+// plus the round they are advancing *from*: the server then requires them to
+// be the current judge (when the round has one) and rejects a stale round so
+// two taps can't skip a prompt.
+type StartRoundRequest struct {
+	PlayerId PlayerId `json:"id"`
+	Round    int      `json:"round"`
+}
+
 // StartRound godoc
 //
 //	@Summary		Draws the next prompt (starts a round)
-//	@Description	Pops the next prompt off the game's shuffled deck, begins a new round (selecting its judge), and clears the previous round's notes. Driven by the manager (host).
+//	@Description	Pops the next prompt off the game's shuffled deck, begins a new round (selecting its judge), and clears the previous round's notes. With no body it is the manager's (host) unconditional draw. A player may advance instead by sending {id, round}: id must be the current judge (any joined player at round 0 / in a judge-less round) and round must be the current round number.
 //	@Router			/games/{code}/rounds [post]
+//	@Accept			json
 //	@Produce		json
-//	@Param			code	path		string	true	"game code"
+//	@Param			code	path		string					true	"game code"
+//	@Param			request	body		game.StartRoundRequest	false	"player advancing the round (omit for the host)"
+//	@Failure		400		{object}	ErrorResponse
 //	@Failure		404		{object}	ErrorResponse
+//	@Failure		409		{object}	ErrorResponse
 //	@Failure		500		{object}	ErrorResponse
 //	@Success		201		{object}	RoundState
 func StartRound(c *gin.Context) {
@@ -154,9 +169,30 @@ func StartRound(c *gin.Context) {
 	if !ok {
 		return
 	}
-	state, err := g.StartRound()
+
+	// The body is optional: the manager posts without one (the unconditional
+	// host draw), so only bind when the request actually carries content.
+	request := StartRoundRequest{}
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&request); err != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+			return
+		}
+	}
+
+	var state RoundState
+	var err error
+	if request.PlayerId != "" {
+		state, err = g.AdvanceRound(request.PlayerId, request.Round)
+	} else {
+		state, err = g.StartRound()
+	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		status := http.StatusInternalServerError
+		if isConflict(err) {
+			status = http.StatusConflict
+		}
+		c.JSON(status, ErrorResponse{Error: err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, state)

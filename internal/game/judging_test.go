@@ -446,3 +446,114 @@ func TestNotesKeepStableIdsInShuffledOrder(t *testing.T) {
 		}
 	}
 }
+
+// --- Player-driven round advancing (AdvanceRound) ---
+
+func TestAdvanceRoundAnyPlayerStartsFirstRound(t *testing.T) {
+	g := judgingGame(t, "alice", "bob", "carol")
+	c := newTestClient(g.hub)
+
+	// No round yet — any joined player may kick the game off (the host only
+	// created the game).
+	state, err := g.AdvanceRound("bob", 0)
+	if err != nil {
+		t.Fatalf("AdvanceRound from round 0: %v", err)
+	}
+	if state.Round != 1 || state.Prompt == "" || state.JudgeId == "" {
+		t.Fatalf("expected a started round 1 with prompt and judge, got %+v", state)
+	}
+
+	// The round reached the room like a host draw would.
+	starts := eventsOfType(drainEvents(t, c), "round_started")
+	if len(starts) != 1 || starts[0].Round != 1 {
+		t.Fatalf("expected one round_started for round 1, got %+v", starts)
+	}
+}
+
+func TestAdvanceRoundOnlyJudgeMayAdvance(t *testing.T) {
+	g := judgingGame(t, "alice", "bob", "carol")
+	state, _ := g.StartRound()
+
+	var nonJudge PlayerId
+	for _, id := range g.GetPlayers() {
+		if id != state.JudgeId {
+			nonJudge = id
+			break
+		}
+	}
+
+	if _, err := g.AdvanceRound(nonJudge, state.Round); !errors.Is(err, ErrNotTheJudge) {
+		t.Fatalf("expected ErrNotTheJudge for %q, got %v", nonJudge, err)
+	}
+
+	next, err := g.AdvanceRound(state.JudgeId, state.Round)
+	if err != nil {
+		t.Fatalf("AdvanceRound by judge: %v", err)
+	}
+	if next.Round != state.Round+1 {
+		t.Fatalf("expected round %d, got %d", state.Round+1, next.Round)
+	}
+}
+
+func TestAdvanceRoundRejectsStaleRound(t *testing.T) {
+	g := judgingGame(t, "alice", "bob")
+	state, _ := g.StartRound()
+
+	// The judge advances; a second request still citing the old round loses
+	// the race and must not skip a prompt.
+	if _, err := g.AdvanceRound(state.JudgeId, state.Round); err != nil {
+		t.Fatalf("AdvanceRound: %v", err)
+	}
+	if _, err := g.AdvanceRound(state.JudgeId, state.Round); !errors.Is(err, ErrRoundAdvanced) {
+		t.Fatalf("expected ErrRoundAdvanced on a stale round, got %v", err)
+	}
+	if got := g.CurrentRoundState().Round; got != state.Round+1 {
+		t.Fatalf("stale advance must not move the round: expected %d, got %d", state.Round+1, got)
+	}
+}
+
+func TestAdvanceRoundAnyPlayerInJudgelessRound(t *testing.T) {
+	g := judgingGame(t, "solo")
+	state, _ := g.StartRound()
+	if state.JudgeId != "" {
+		t.Fatalf("expected a judge-less round, got judge %q", state.JudgeId)
+	}
+
+	next, err := g.AdvanceRound("solo", state.Round)
+	if err != nil {
+		t.Fatalf("AdvanceRound in judge-less round: %v", err)
+	}
+	if next.Round != state.Round+1 {
+		t.Fatalf("expected round %d, got %d", state.Round+1, next.Round)
+	}
+}
+
+func TestAdvanceRoundRequiresJoinedPlayer(t *testing.T) {
+	g := judgingGame(t, "alice", "bob")
+	state, _ := g.StartRound()
+
+	if _, err := g.AdvanceRound("mallory", state.Round); err == nil {
+		t.Fatal("expected an error for an unknown player")
+	}
+}
+
+func TestAdvanceRoundClearsNotesLikeHostDraw(t *testing.T) {
+	g := judgingGame(t, "alice", "bob")
+	state, _ := g.StartRound()
+
+	for _, id := range g.GetPlayers() {
+		if id != state.JudgeId {
+			submitOneTile(t, g, id)
+		}
+	}
+	if len(g.GetSubmittedNotes()) != 1 {
+		t.Fatalf("expected 1 note on the board, got %d", len(g.GetSubmittedNotes()))
+	}
+
+	if _, err := g.AdvanceRound(state.JudgeId, state.Round); err != nil {
+		t.Fatalf("AdvanceRound: %v", err)
+	}
+	if len(g.GetSubmittedNotes()) != 0 {
+		t.Fatal("expected the board to clear when the judge advances the round")
+	}
+}
