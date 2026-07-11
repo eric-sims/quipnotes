@@ -11,7 +11,7 @@ import (
 func judgingGame(t *testing.T, players ...PlayerId) *Manager {
 	t.Helper()
 	r := newTestRegistry()
-	g, _ := r.CreateGame()
+	g, _ := r.CreateGame(false)
 	for _, id := range players {
 		if err := g.AddPlayer(id); err != nil {
 			t.Fatalf("AddPlayer %s: %v", id, err)

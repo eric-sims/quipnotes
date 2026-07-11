@@ -11,9 +11,9 @@ go test ./...            # run all tests
 swag init                # regenerate Swagger docs in docs/ from handler annotations
 ```
 
-Requires a `.env` file (copy `.env.example`). The server **panics on startup** if `.env` is missing or `WORDS_FILE_PATH` does not point to a readable CSV. `PROMPTS_FILE_PATH` is **optional** (one prompt per line; see `data/prompts.example.txt`) — if unset/unreadable the server logs a warning and falls back to a built-in prompt bank (`defaultPrompts` in `internal/game/prompts.go`) rather than panicking. Swagger UI is served at `/swagger/index.html`.
+Requires a `.env` file (copy `.env.example`). The server **panics on startup** if `.env` is missing or `WORDS_FILE_PATH` does not point to a readable CSV. `PROMPTS_FILE_PATH` is **optional** (one prompt per line; see `data/prompts.example.txt`) — if unset/unreadable the server logs a warning and falls back to a built-in prompt bank (`defaultPromptTexts` in `internal/game/prompts.go`, all rated family-friendly) rather than panicking. Swagger UI is served at `/swagger/index.html`.
 
-The `words.csv` format is a single-column, header-less CSV. Each row becomes a tile keyed as `"<rowIndex>|<word>"`. Prompts are loaded line-based (not CSV) so they may contain commas.
+The `words.csv` format is a single-column, header-less CSV. Each row becomes a tile keyed as `"<rowIndex>|<word>"`. Prompts are loaded line-based (not CSV) so they may contain commas. In the prompt file a `#` line is a comment and a prompt prefixed with the `[adult]` marker is rated **adult** (overly explicit/suggestive/sexual); every other line is **family-friendly**. Each loaded prompt is a `game.Prompt{Text, FamilyFriendly}`, and a game created in family-friendly mode draws only the family-friendly subset (see `POST /games` below).
 
 ## Architecture
 
@@ -23,12 +23,14 @@ The server hosts **many concurrent games**. The package-level `game.Games *Regis
 - `tileKeys []string` — the base tile list, loaded once from CSV
 - `mux sync.RWMutex` — guards the games map
 
-`LoadWordsFromCSV` returns the `tileKeys` and `LoadPromptsFromFile` the `prompts`;
-`NewRegistry(tileKeys, prompts)` stores both. Registry methods: `CreateGame()` (allocates a
-unique 4-digit code, retrying on collision, copies `tileKeys` into a fresh per-game pool and
-a **shuffled copy of `prompts` into the game's deck** — **no players are added at creation**),
-`GetGame(code)`, and `CloseGame(code)` (no auth; broadcasts `game_ended` and closes the
-game's sockets).
+`LoadWordsFromCSV` returns the `tileKeys` and `LoadPromptsFromFile` the rated
+`[]game.Prompt`; `NewRegistry(tileKeys, prompts)` stores both. Registry methods:
+`CreateGame(familyFriendly bool)` (allocates a unique 4-digit code, retrying on collision,
+copies `tileKeys` into a fresh per-game pool and a **shuffled copy of the prompt texts into
+the game's deck** — filtered to the **family-friendly** subset when `familyFriendly` is set,
+via `promptDeckForMode`, which falls back to the built-in family-friendly defaults if that
+subset is empty; **no players are added at creation**), `GetGame(code)`, and
+`CloseGame(code)` (no auth; broadcasts `game_ended` and closes the game's sockets).
 
 Each `game.Manager` is **one game** and holds:
 - `code string` — its 4-digit code
@@ -49,8 +51,10 @@ the judging state, **selects the round's judge**, and broadcasts `round_started`
 returns `ErrNoActiveRound` / `ErrAlreadySubmitted` / `ErrJudgeCannotSubmit` /
 `ErrJudgingStarted` (all mapped to **409** via `isConflict` in `router.go`) to enforce one
 note per round, that the judge doesn't answer, and that submissions close once judging
-opens. `words.go` loads words, `prompts.go` loads prompts, `hub.go` holds the WebSocket
-hub + connection pumps; judging tests live in `judging_test.go`.
+opens. `words.go` loads words, `prompts.go` loads + rates prompts (the `[adult]`/`#`
+parsing and the family-friendly fallback), `hub.go` holds the WebSocket hub + connection
+pumps; prompt/family-friendly tests live in `prompts_test.go` and judging tests in
+`judging_test.go`.
 
 **Judging & scoring:** each round one player is the **judge** — `pickJudgeLocked` takes the
 first player (in join order) who hasn't judged this rotation cycle, resetting the cycle once
@@ -70,7 +74,7 @@ Player IDs only need to be unique **within a game**.
 **Tile key format:** `"<csvRowIndex>|<word>"` — the index prefix makes duplicate words distinct. Every tile drawn, held, and submitted uses this format throughout the wire protocol. A submitted note may also contain the reserved **`BreakToken` (`"\n"`)** between clusters to mark a line break; it has no `|`, so it never collides with a tile. Notes are stored and returned as their **token list**, not flattened to a string — the host parses each token and renders each cluster on its own line.
 
 **Request/response flow** (every route is game-scoped):
-- `POST /games` — manager starts a game; returns `{code}`
+- `POST /games` — manager starts a game; returns `{code}`. Optional body `{familyFriendly:true}` limits the game's prompt deck to family-friendly prompts (body may be omitted → all prompts; **400** on a malformed body)
 - `DELETE /games/:code` — manager ends a game (open, no auth)
 - `GET /games/:code` — returns `{code, players}` (players as bare id strings); used to validate a join
 - `GET /games/:code/players` — returns the roster `{players: [{id, score}]}`; used by the host to show who has joined and the live scoreboard

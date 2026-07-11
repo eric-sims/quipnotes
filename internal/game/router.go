@@ -26,6 +26,14 @@ type CreateGameResponse struct {
 	Code string `json:"code"`
 }
 
+// CreateGameRequest is the optional body of POST /games. familyFriendly limits
+// the new game's prompt deck to family-friendly prompts (no explicit/suggestive
+// content). The body may be omitted entirely, which defaults to false (all
+// prompts) — so existing callers that post no body are unaffected.
+type CreateGameRequest struct {
+	FamilyFriendly bool `json:"familyFriendly"`
+}
+
 type GameInfoResponse struct {
 	Code    string     `json:"code"`
 	Players []PlayerId `json:"players"`
@@ -75,13 +83,25 @@ func resolveGame(c *gin.Context) (*Manager, bool) {
 // CreateGame godoc
 //
 //	@Summary		Starts a new game
-//	@Description	Creates a new game and returns its unique 4-digit code. Driven by the manager (host).
+//	@Description	Creates a new game and returns its unique 4-digit code. Driven by the manager (host). An optional body {familyFriendly:true} limits the game's prompt deck to family-friendly prompts; the body may be omitted (defaults to all prompts).
 //	@Router			/games [post]
+//	@Accept			json
 //	@Produce		json
+//	@Param			request	body		game.CreateGameRequest	false	"family-friendly mode (omit for all prompts)"
+//	@Failure		400	{object}	ErrorResponse
 //	@Failure		500	{object}	ErrorResponse
 //	@Success		201	{object}	CreateGameResponse
 func CreateGame(c *gin.Context) {
-	g, err := Games.CreateGame()
+	// The body is optional: a host that just wants all prompts may post none.
+	request := CreateGameRequest{}
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&request); err != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+			return
+		}
+	}
+
+	g, err := Games.CreateGame(request.FamilyFriendly)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return

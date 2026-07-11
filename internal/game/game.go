@@ -158,11 +158,12 @@ func (gm *Manager) Code() string {
 }
 
 // Registry owns the collection of live games and the shared base tile and
-// prompt lists that seed every new game.
+// prompt lists that seed every new game. Prompts carry a family-friendly rating
+// so a game can be created with only the family-friendly subset.
 type Registry struct {
 	games    map[string]*Manager
 	tileKeys []string
-	prompts  []string
+	prompts  []Prompt
 	mux      sync.RWMutex
 }
 
@@ -171,8 +172,8 @@ type Registry struct {
 const codeGenAttempts = 100
 
 // NewRegistry creates an empty registry that seeds every new game from tileKeys
-// (the word pool) and prompts (the prompt deck).
-func NewRegistry(tileKeys, prompts []string) *Registry {
+// (the word pool) and prompts (the rated prompt bank).
+func NewRegistry(tileKeys []string, prompts []Prompt) *Registry {
 	return &Registry{
 		games:    make(map[string]*Manager),
 		tileKeys: tileKeys,
@@ -182,22 +183,48 @@ func NewRegistry(tileKeys, prompts []string) *Registry {
 }
 
 // CreateGame allocates a new game under a unique 4-digit code and returns it.
-// No players are added at creation — players join later with the code.
-func (r *Registry) CreateGame() (*Manager, error) {
+// When familyFriendly is set the game's prompt deck is limited to the
+// family-friendly prompts, so it never draws an adult prompt. No players are
+// added at creation — players join later with the code.
+func (r *Registry) CreateGame(familyFriendly bool) (*Manager, error) {
 	r.mux.Lock()
 	defer r.mux.Unlock()
 
+	deck := r.promptDeckForMode(familyFriendly)
 	for i := 0; i < codeGenAttempts; i++ {
 		code := fmt.Sprintf("%04d", rand.IntN(10000))
 		if _, exists := r.games[code]; exists {
 			continue
 		}
-		game := newGame(code, r.tileKeys, r.prompts)
+		game := newGame(code, r.tileKeys, deck)
 		r.games[code] = game
-		log.Printf("Created game: %s", code)
+		log.Printf("Created game: %s (familyFriendly=%t)", code, familyFriendly)
 		return game, nil
 	}
 	return nil, errors.New("could not allocate a free game code")
+}
+
+// promptDeckForMode returns the prompt texts a new game should draw from: all
+// prompts, or only the family-friendly ones when familyFriendly is set. If a
+// family-friendly game would have no prompts (a misconfigured file with no
+// family-friendly entries) it falls back to the built-in defaults, which are all
+// family-friendly, so the game stays playable and still never serves an adult
+// prompt. The caller must hold r.mux.
+func (r *Registry) promptDeckForMode(familyFriendly bool) []string {
+	texts := make([]string, 0, len(r.prompts))
+	for _, p := range r.prompts {
+		if familyFriendly && !p.FamilyFriendly {
+			continue
+		}
+		texts = append(texts, p.Text)
+	}
+	if len(texts) == 0 && familyFriendly {
+		log.Println("no family-friendly prompts available; falling back to built-in family-friendly defaults")
+		for _, p := range defaultPrompts() {
+			texts = append(texts, p.Text)
+		}
+	}
+	return texts
 }
 
 // GetGame looks up a live game by code.

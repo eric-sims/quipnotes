@@ -14,9 +14,13 @@ func sampleTileKeys() []string {
 	return []string{"0|alpha", "1|beta", "2|gamma", "3|delta", "4|epsilon"}
 }
 
-// samplePrompts builds a small base prompt list for tests.
-func samplePrompts() []string {
-	return []string{"prompt one", "prompt two", "prompt three"}
+// samplePrompts builds a small base prompt list for tests (all family-friendly).
+func samplePrompts() []Prompt {
+	return []Prompt{
+		{Text: "prompt one", FamilyFriendly: true},
+		{Text: "prompt two", FamilyFriendly: true},
+		{Text: "prompt three", FamilyFriendly: true},
+	}
 }
 
 // newTestRegistry wires a registry with the sample tile + prompt lists.
@@ -27,7 +31,7 @@ func newTestRegistry() *Registry {
 func TestCreateGameReturnsFourDigitCode(t *testing.T) {
 	r := newTestRegistry()
 
-	g, err := r.CreateGame()
+	g, err := r.CreateGame(false)
 	if err != nil {
 		t.Fatalf("CreateGame returned error: %v", err)
 	}
@@ -47,7 +51,7 @@ func TestCreateGameCodesAreUnique(t *testing.T) {
 	seen := make(map[string]bool)
 
 	for i := 0; i < 50; i++ {
-		g, err := r.CreateGame()
+		g, err := r.CreateGame(false)
 		if err != nil {
 			t.Fatalf("CreateGame returned error on iteration %d: %v", i, err)
 		}
@@ -61,8 +65,8 @@ func TestCreateGameCodesAreUnique(t *testing.T) {
 func TestGamesAreIsolated(t *testing.T) {
 	r := newTestRegistry()
 
-	gameA, _ := r.CreateGame()
-	gameB, _ := r.CreateGame()
+	gameA, _ := r.CreateGame(false)
+	gameB, _ := r.CreateGame(false)
 
 	if err := gameA.AddPlayer("alice"); err != nil {
 		t.Fatalf("AddPlayer A: %v", err)
@@ -92,7 +96,7 @@ func TestGamesAreIsolated(t *testing.T) {
 
 func TestRosterReflectsPlayers(t *testing.T) {
 	r := newTestRegistry()
-	g, _ := r.CreateGame()
+	g, _ := r.CreateGame(false)
 
 	if roster := g.Roster(); len(roster) != 0 {
 		t.Fatalf("expected empty roster on a fresh game, got %d", len(roster))
@@ -140,7 +144,7 @@ func nextPlayersEvent(t *testing.T, c *wsClient) event {
 
 func TestAddRemovePlayerBroadcastsRoster(t *testing.T) {
 	r := newTestRegistry()
-	g, _ := r.CreateGame()
+	g, _ := r.CreateGame(false)
 	c := newTestClient(g.hub)
 
 	if err := g.AddPlayer("alice"); err != nil {
@@ -167,7 +171,7 @@ func TestGetGameMissingCode(t *testing.T) {
 
 func TestCloseGameRemovesIt(t *testing.T) {
 	r := newTestRegistry()
-	g, _ := r.CreateGame()
+	g, _ := r.CreateGame(false)
 
 	if err := r.CloseGame(g.Code()); err != nil {
 		t.Fatalf("CloseGame: %v", err)
@@ -183,7 +187,7 @@ func TestCloseGameRemovesIt(t *testing.T) {
 
 func TestSubmitRoundTrip(t *testing.T) {
 	r := newTestRegistry()
-	g, _ := r.CreateGame()
+	g, _ := r.CreateGame(false)
 	if err := g.AddPlayer("alice"); err != nil {
 		t.Fatalf("AddPlayer: %v", err)
 	}
@@ -216,7 +220,7 @@ func TestSubmitRoundTrip(t *testing.T) {
 
 func TestSubmitRequiresActiveRound(t *testing.T) {
 	r := newTestRegistry()
-	g, _ := r.CreateGame()
+	g, _ := r.CreateGame(false)
 	if err := g.AddPlayer("alice"); err != nil {
 		t.Fatalf("AddPlayer: %v", err)
 	}
@@ -233,7 +237,7 @@ func TestSubmitRequiresActiveRound(t *testing.T) {
 
 func TestSubmitOncePerRound(t *testing.T) {
 	r := newTestRegistry()
-	g, _ := r.CreateGame()
+	g, _ := r.CreateGame(false)
 	if err := g.AddPlayer("alice"); err != nil {
 		t.Fatalf("AddPlayer: %v", err)
 	}
@@ -267,7 +271,7 @@ func TestSubmitOncePerRound(t *testing.T) {
 
 func TestSubmitPreservesBreaks(t *testing.T) {
 	r := newTestRegistry()
-	g, _ := r.CreateGame()
+	g, _ := r.CreateGame(false)
 	if err := g.AddPlayer("alice"); err != nil {
 		t.Fatalf("AddPlayer: %v", err)
 	}
@@ -300,7 +304,7 @@ func TestSubmitPreservesBreaks(t *testing.T) {
 
 func TestSubmitNormalizesBreaks(t *testing.T) {
 	r := newTestRegistry()
-	g, _ := r.CreateGame()
+	g, _ := r.CreateGame(false)
 	if err := g.AddPlayer("alice"); err != nil {
 		t.Fatalf("AddPlayer: %v", err)
 	}
@@ -324,7 +328,7 @@ func TestSubmitNormalizesBreaks(t *testing.T) {
 
 func TestSubmitRejectsBreaksOnlyNote(t *testing.T) {
 	r := newTestRegistry()
-	g, _ := r.CreateGame()
+	g, _ := r.CreateGame(false)
 	if err := g.AddPlayer("alice"); err != nil {
 		t.Fatalf("AddPlayer: %v", err)
 	}
@@ -344,7 +348,7 @@ func TestSubmitRejectsBreaksOnlyNote(t *testing.T) {
 
 func TestStartRoundAdvancesAndWraps(t *testing.T) {
 	r := newTestRegistry()
-	g, _ := r.CreateGame()
+	g, _ := r.CreateGame(false)
 
 	n := len(samplePrompts())
 	seen := make([]string, 0, n)
@@ -364,8 +368,8 @@ func TestStartRoundAdvancesAndWraps(t *testing.T) {
 		t.Fatalf("expected %d prompts drawn, got %d", n, len(seen))
 	}
 	for _, want := range samplePrompts() {
-		if !slices.Contains(seen, want) {
-			t.Fatalf("prompt %q was never drawn: deck is not a full copy", want)
+		if !slices.Contains(seen, want.Text) {
+			t.Fatalf("prompt %q was never drawn: deck is not a full copy", want.Text)
 		}
 	}
 
@@ -385,14 +389,14 @@ func TestStartRoundAdvancesAndWraps(t *testing.T) {
 
 func TestPromptDeckOrderVariesBetweenGames(t *testing.T) {
 	// Use a larger deck so a matching shuffle is astronomically unlikely.
-	prompts := make([]string, 30)
+	prompts := make([]Prompt, 30)
 	for i := range prompts {
-		prompts[i] = fmt.Sprintf("prompt-%02d", i)
+		prompts[i] = Prompt{Text: fmt.Sprintf("prompt-%02d", i), FamilyFriendly: true}
 	}
 	r := NewRegistry(sampleTileKeys(), prompts)
 
 	drawAll := func() []string {
-		g, _ := r.CreateGame()
+		g, _ := r.CreateGame(false)
 		out := make([]string, len(prompts))
 		for i := range prompts {
 			st, _ := g.StartRound()
