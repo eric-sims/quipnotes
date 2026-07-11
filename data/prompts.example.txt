@@ -1,3 +1,13 @@
+# Example prompt bank. Point PROMPTS_FILE_PATH at a file like this (one prompt
+# per round, one prompt per line). If unset/unreadable the server falls back to
+# a built-in bank.
+#
+# Lines starting with '#' are comments (ignored). Blank lines are ignored.
+# Prefix a prompt with the '[adult]' marker to rate it adult (overly explicit,
+# suggestive, or sexual): adult prompts are withheld from games started in
+# family-friendly mode, and the marker is stripped from the prompt text. Every
+# other line is treated as family-friendly. Prompts may contain commas.
+
 The worst possible thing to say on a first date
 A rejected slogan for an energy drink
 What the villain monologues about before losing
@@ -12,9 +22,6 @@ What the fortune cookie should have said
 A confession whispered to a houseplant
 The worst superpower to have at a wedding
 A newspaper headline from the year 3000
-What the GPS says when it gives up on you
-A ransom note for something completely worthless
-The title of your unauthorized autobiography
-An excuse for being late that no one believes
-What the toaster would say if it could talk
-A bad piece of advice disguised as wisdom
+
+# An adult prompt: served only when family-friendly mode is off.
+[adult] Whisper something seductive to your date during a movie

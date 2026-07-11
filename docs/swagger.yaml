@@ -4,6 +4,11 @@ definitions:
       id:
         type: string
     type: object
+  game.CreateGameRequest:
+    properties:
+      familyFriendly:
+        type: boolean
+    type: object
   game.CreateGameResponse:
     properties:
       code:
@@ -129,8 +134,18 @@ info:
 paths:
   /games:
     post:
+      consumes:
+      - application/json
       description: Creates a new game and returns its unique 4-digit code. Driven
-        by the manager (host).
+        by the manager (host). An optional body {familyFriendly:true} limits the game's
+        prompt deck to family-friendly prompts; the body may be omitted (defaults
+        to all prompts).
+      parameters:
+      - description: family-friendly mode (omit for all prompts)
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/game.CreateGameRequest'
       produces:
       - application/json
       responses:
@@ -138,6 +153,10 @@ paths:
           description: Created
           schema:
             $ref: '#/definitions/game.CreateGameResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:

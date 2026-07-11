@@ -17,16 +17,35 @@ const docTemplate = `{
     "paths": {
         "/games": {
             "post": {
-                "description": "Creates a new game and returns its unique 4-digit code. Driven by the manager (host).",
+                "description": "Creates a new game and returns its unique 4-digit code. Driven by the manager (host). An optional body {familyFriendly:true} limits the game's prompt deck to family-friendly prompts; the body may be omitted (defaults to all prompts).",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "summary": "Starts a new game",
+                "parameters": [
+                    {
+                        "description": "family-friendly mode (omit for all prompts)",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/game.CreateGameRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "201": {
                         "description": "Created",
                         "schema": {
                             "$ref": "#/definitions/game.CreateGameResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/game.ErrorResponse"
                         }
                     },
                     "500": {
@@ -670,6 +689,14 @@ const docTemplate = `{
             "properties": {
                 "id": {
                     "type": "string"
+                }
+            }
+        },
+        "game.CreateGameRequest": {
+            "type": "object",
+            "properties": {
+                "familyFriendly": {
+                    "type": "boolean"
                 }
             }
         },
