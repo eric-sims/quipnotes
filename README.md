@@ -52,8 +52,3 @@ The worst possible thing to say on a first date
 A terrible name for a boat
 [adult] Whisper something seductive to your date during a movie
 ```
-
-## TODO
-- [ ] Finish Client
-- [ ] Create a user-friendly interaction for reading the ransom notes (another client?)
-- [ ] (Extra) Add a way for users to add custom words to the word list if desired.
