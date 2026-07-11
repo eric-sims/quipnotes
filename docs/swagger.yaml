@@ -94,6 +94,13 @@ definitions:
       winnerId:
         type: string
     type: object
+  game.StartRoundRequest:
+    properties:
+      id:
+        type: string
+      round:
+        type: integer
+    type: object
   game.SubmitNoteRequest:
     properties:
       id:
@@ -464,15 +471,24 @@ paths:
       summary: Current round
   /games/{code}/rounds:
     post:
-      description: Pops the next prompt off the game's shuffled deck, begins a new
-        round (selecting its judge), and clears the previous round's notes. Driven
-        by the manager (host).
+      consumes:
+      - application/json
+      description: 'Pops the next prompt off the game''s shuffled deck, begins a new
+        round (selecting its judge), and clears the previous round''s notes. With
+        no body it is the manager''s (host) unconditional draw. A player may advance
+        instead by sending {id, round}: id must be the current judge (any joined player
+        at round 0 / in a judge-less round) and round must be the current round number.'
       parameters:
       - description: game code
         in: path
         name: code
         required: true
         type: string
+      - description: player advancing the round (omit for the host)
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/game.StartRoundRequest'
       produces:
       - application/json
       responses:
@@ -480,8 +496,16 @@ paths:
           description: Created
           schema:
             $ref: '#/definitions/game.RoundState'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/game.ErrorResponse'
+        "409":
+          description: Conflict
           schema:
             $ref: '#/definitions/game.ErrorResponse'
         "500":

@@ -54,6 +54,8 @@ var (
 	ErrFavoritePicked     = errors.New("a favorite has already been picked this round")
 	ErrNoteNotFlipped     = errors.New("flip the note over before picking it")
 	ErrUnknownNote        = errors.New("unknown note")
+	ErrNotTheJudge        = errors.New("only this round's judge can start the next round")
+	ErrRoundAdvanced      = errors.New("the next round has already started")
 )
 
 // submittedNote is one ransom note on the board: its ordered token list (tiles
@@ -522,9 +524,58 @@ func normalizeNote(note []string) []string {
 // so a game never runs out of prompts. Returns the new round's state.
 func (gm *Manager) StartRound() (RoundState, error) {
 	gm.mux.Lock()
+	state, err := gm.startRoundLocked()
+	gm.mux.Unlock()
+	if err != nil {
+		return RoundState{}, err
+	}
+	gm.announceRound(state)
+	return state, nil
+}
 
-	if len(gm.promptDeck) == 0 {
+// AdvanceRound is the player-driven way to start the next round, so a game can
+// run without anyone touching the host screen after creating it. fromRound is
+// the round the caller believes is current: a mismatch means someone else beat
+// them to it (ErrRoundAdvanced, a friendly 409) rather than skipping a prompt.
+// While a round has a judge, only the judge may advance; round 0 and judge-less
+// rounds (<2 players) may be advanced by any joined player.
+func (gm *Manager) AdvanceRound(id PlayerId, fromRound int) (RoundState, error) {
+	gm.mux.Lock()
+
+	var err error
+	switch {
+	case !slices.Contains(gm.players, id):
+		err = fmt.Errorf("player %s not found", id)
+	case fromRound != gm.round:
+		err = ErrRoundAdvanced
+	case gm.judge != "" && id != gm.judge:
+		err = ErrNotTheJudge
+	}
+	if err != nil {
 		gm.mux.Unlock()
+		return RoundState{}, err
+	}
+
+	state, err := gm.startRoundLocked()
+	gm.mux.Unlock()
+	if err != nil {
+		return RoundState{}, err
+	}
+	gm.announceRound(state)
+	return state, nil
+}
+
+// announceRound pushes a freshly-started round to every connected client.
+// Called outside the lock so a slow subscriber can't stall game state.
+func (gm *Manager) announceRound(state RoundState) {
+	gm.hub.broadcast(event{Type: "round_started", Round: state.Round, Prompt: state.Prompt, JudgeId: state.JudgeId})
+	log.Printf("Game %s: started round %d with prompt %q (judge %q)", gm.code, state.Round, state.Prompt, state.JudgeId)
+}
+
+// startRoundLocked does the actual round rollover. The caller must hold gm.mux
+// and, on success, broadcast the new round via announceRound after unlocking.
+func (gm *Manager) startRoundLocked() (RoundState, error) {
+	if len(gm.promptDeck) == 0 {
 		return RoundState{}, errors.New("no prompts available")
 	}
 	if gm.promptCursor >= len(gm.promptDeck) {
@@ -544,15 +595,7 @@ func (gm *Manager) StartRound() (RoundState, error) {
 	gm.favoriteNote = 0
 	gm.winner = ""
 	gm.judge = gm.pickJudgeLocked()
-	state := gm.roundStateLocked()
-
-	gm.mux.Unlock()
-
-	// Push the new round to every connected client. Broadcast outside the lock
-	// so a slow subscriber can't stall game state.
-	gm.hub.broadcast(event{Type: "round_started", Round: state.Round, Prompt: state.Prompt, JudgeId: state.JudgeId})
-	log.Printf("Game %s: started round %d with prompt %q (judge %q)", gm.code, state.Round, state.Prompt, state.JudgeId)
-	return state, nil
+	return gm.roundStateLocked(), nil
 }
 
 // CurrentRoundState returns the full active-round snapshot (round 0 with zero
