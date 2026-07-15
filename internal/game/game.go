@@ -418,6 +418,7 @@ func (gm *Manager) DrawWordTiles(n int, id PlayerId) ([]string, error) {
 	gm.mux.Lock()
 
 	if n <= 0 || n > len(gm.wordTiles) {
+		gm.mux.Unlock()
 		return nil, fmt.Errorf("invalid number of wordTiles requested: %d", n)
 	}
 
@@ -431,6 +432,7 @@ func (gm *Manager) DrawWordTiles(n int, id PlayerId) ([]string, error) {
 
 	// Check if there are enough wordTiles available
 	if len(availableWords) < n {
+		gm.mux.Unlock()
 		return nil, fmt.Errorf("not enough wordTiles available, only %d left", len(availableWords))
 	}
 
