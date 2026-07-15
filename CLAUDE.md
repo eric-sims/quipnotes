@@ -11,20 +11,22 @@ go test ./...            # run all tests
 swag init                # regenerate Swagger docs in docs/ from handler annotations
 ```
 
-Requires a `.env` file (copy `.env.example`). The server **panics on startup** if `.env` is missing or `WORDS_FILE_PATH` does not point to a readable CSV. `PROMPTS_FILE_PATH` is **optional** (one prompt per line; see `data/prompts.example.txt`) — if unset/unreadable the server logs a warning and falls back to a built-in prompt bank (`defaultPromptTexts` in `internal/game/prompts.go`, all rated family-friendly) rather than panicking. Swagger UI is served at `/swagger/index.html`.
+Requires a `.env` file (copy `.env.example`). The server **panics on startup** if `.env` is missing or `WORDS_FILE_PATH` does not point to a readable words file. `PROMPTS_FILE_PATH` is **optional** (one prompt per line; see `data/prompts.example.txt`) — if unset/unreadable the server logs a warning and falls back to a built-in prompt bank (`defaultPromptTexts` in `internal/game/prompts.go`, all rated family-friendly) rather than panicking. Swagger UI is served at `/swagger/index.html`.
 
-The `words.csv` format is a single-column, header-less CSV. Each row becomes a tile keyed as `"<rowIndex>|<word>"`. Prompts are loaded line-based (not CSV) so they may contain commas. In the prompt file a `#` line is a comment and a prompt prefixed with the `[adult]` marker is rated **adult** (overly explicit/suggestive/sexual); every other line is **family-friendly**. Each loaded prompt is a `game.Prompt{Text, FamilyFriendly}`, and a game created in family-friendly mode draws only the family-friendly subset (see `POST /games` below).
+The `words.txt` format is prompt-style: one word per line, prefixed with one or more **part-of-speech markers** listing every part of speech the word can plausibly be (e.g. `[noun][verb] play`); `#` comments and blank lines are ignored. Valid markers: `noun verb adjective adverb pronoun preposition conjunction interjection other` (case-insensitive; `other` holds punctuation, suffix tiles, and articles). The parser is forgiving — an unknown marker is dropped with a warning, an unmarked word defaults to `["other"]`, and a marker-only line is skipped — but an unreadable or empty file is still fatal. Each accepted word line becomes a tile keyed as `"<index>|<word>"` (index = 0-based ordinal of accepted lines). Prompts are loaded line-based (not CSV) so they may contain commas. In the prompt file a `#` line is a comment and a prompt prefixed with the `[adult]` marker is rated **adult** (overly explicit/suggestive/sexual); every other line is **family-friendly**. Each loaded prompt is a `game.Prompt{Text, FamilyFriendly}`, and a game created in family-friendly mode draws only the family-friendly subset (see `POST /games` below).
 
 ## Architecture
 
 The server hosts **many concurrent games**. The package-level `game.Games *Registry`
 (`internal/game/game.go`), initialized in `main.go`, holds:
 - `games map[string]*Manager` — live games keyed by 4-digit code
-- `tileKeys []string` — the base tile list, loaded once from CSV
+- `tileKeys []string` — the base tile list, loaded once from the words file
+- `tilePos map[string][]string` — tile key → part-of-speech tags (immutable after startup, shared by every game — read without locking via `Registry.TilePos(keys)`, which returns the tags for a set of keys, omitting unknown ones)
 - `mux sync.RWMutex` — guards the games map
 
-`LoadWordsFromCSV` returns the `tileKeys` and `LoadPromptsFromFile` the rated
-`[]game.Prompt`; `NewRegistry(tileKeys, prompts)` stores both. Registry methods:
+`LoadWordsFromFile` returns the `tileKeys` + `tilePos` and `LoadPromptsFromFile` the rated
+`[]game.Prompt`; `NewRegistry(tileKeys, tilePos, prompts)` stores all three (`tilePos` may
+be nil in tests). Registry methods:
 `CreateGame(familyFriendly bool)` (allocates a unique 4-digit code, retrying on collision,
 copies `tileKeys` into a fresh per-game pool and a **shuffled copy of the prompt texts into
 the game's deck** — filtered to the **family-friendly** subset when `familyFriendly` is set,
@@ -80,8 +82,8 @@ Player IDs only need to be unique **within a game**.
 - `GET /games/:code/players` — returns the roster `{players: [{id, score}]}`; used by the host to show who has joined and the live scoreboard
 - `POST /games/:code/players` → `{id}` — player joins (id unique within the game); broadcasts the updated `players` roster
 - `DELETE /games/:code/players/:id` — player leaves; broadcasts the updated `players` roster (and may reassign the judge / open judging, see above)
-- `POST /games/:code/draw` → `{id, count}` — draws `count` available tiles, returns the player's **entire current pile** (not just new tiles)
-- `GET /games/:code/players/:id/tiles` — the player's current pile (used after submit to refresh)
+- `POST /games/:code/draw` → `{id, count}` — draws `count` available tiles, returns the player's **entire current pile** (not just new tiles) as `{words, pos}` — `pos` maps each tile key to its part-of-speech tags (omitted keys → clients treat as `"other"`)
+- `GET /games/:code/players/:id/tiles` — the player's current pile (used after submit to refresh); same `{words, pos}` shape
 - `POST /games/:code/submit` → `{id, note: ["42|banana", "\n", ...]}` — the ordered token list (tiles plus optional `"\n"` line breaks); validates all tiles belong to the player and the round rules, then atomically releases them and appends the normalized token list to `submittedNotes`; **409** if no active round, already answered, submitter is the judge, or judging has opened
 - `POST /games/:code/rounds` — draws the next prompt; returns the full `RoundState` (201). With **no body** it is the manager's unconditional host draw. A **player** may advance instead with `{id, round}` (`AdvanceRound`): `id` must be a joined player and — while the round has a judge — the current judge (round 0 and judge-less rounds accept any joined player, so a game can run without the host after creation); `round` is the round being advanced *from* — a mismatch is **409** `ErrRoundAdvanced` so racing taps can't skip a prompt (**409** `ErrNotTheJudge` for a non-judge)
 - `GET /games/:code/round` — current `RoundState`: `{round, prompt, judgeId, judgingOpen, count, total, favoriteNoteId, winnerId}` (round 0 / zero values before any draw; `total` excludes the judge)
@@ -93,7 +95,8 @@ Player IDs only need to be unique **within a game**.
 
 A handler that can't find `:code` returns **404** (`resolveGame` in `router.go`). `router.go`
 holds all Gin handlers (with Swagger annotations) and the request/response structs. Pure
-game logic is in `game.go`. `words.go` handles CSV loading only.
+game logic is in `game.go`. `words.go` handles words-file loading only (marker parsing in
+`parseWordLine`; tests in `words_test.go`).
 
 ## Gotchas
 

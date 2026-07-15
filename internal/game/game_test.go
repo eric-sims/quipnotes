@@ -25,7 +25,7 @@ func samplePrompts() []Prompt {
 
 // newTestRegistry wires a registry with the sample tile + prompt lists.
 func newTestRegistry() *Registry {
-	return NewRegistry(sampleTileKeys(), samplePrompts())
+	return NewRegistry(sampleTileKeys(), nil, samplePrompts())
 }
 
 func TestCreateGameReturnsFourDigitCode(t *testing.T) {
@@ -393,7 +393,7 @@ func TestPromptDeckOrderVariesBetweenGames(t *testing.T) {
 	for i := range prompts {
 		prompts[i] = Prompt{Text: fmt.Sprintf("prompt-%02d", i), FamilyFriendly: true}
 	}
-	r := NewRegistry(sampleTileKeys(), prompts)
+	r := NewRegistry(sampleTileKeys(), nil, prompts)
 
 	drawAll := func() []string {
 		g, _ := r.CreateGame(false)

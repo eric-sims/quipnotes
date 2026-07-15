@@ -115,7 +115,7 @@ const docTemplate = `{
         },
         "/games/{code}/draw": {
             "post": {
-                "description": "Draws Tiles (wordTiles) for a given player and a given count",
+                "description": "Draws Tiles (wordTiles) for a given player and a given count. Returns the player's entire pile plus a pos map of part-of-speech tags per tile key.",
                 "consumes": [
                     "application/json"
                 ],
@@ -452,7 +452,7 @@ const docTemplate = `{
         },
         "/games/{code}/players/{id}/tiles": {
             "get": {
-                "description": "Gets all the tiles that are drawn by the player.",
+                "description": "Gets all the tiles that are drawn by the player, plus a pos map of part-of-speech tags per tile key.",
                 "produces": [
                     "application/json"
                 ],
@@ -868,6 +868,15 @@ const docTemplate = `{
         "game.WordsResponse": {
             "type": "object",
             "properties": {
+                "pos": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
                 "words": {
                     "type": "array",
                     "items": {

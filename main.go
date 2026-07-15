@@ -29,9 +29,9 @@ func main() {
 	filePath := os.Getenv("WORDS_FILE_PATH")
 
 	fmt.Println("filePath", filePath)
-	tileKeys, err := game.LoadWordsFromCSV(filePath)
+	tileKeys, tilePos, err := game.LoadWordsFromFile(filePath)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to load words.csv: %s", err.Error()))
+		panic(fmt.Sprintf("Failed to load words file: %s", err.Error()))
 	}
 
 	// Prompts are optional: LoadPromptsFromFile falls back to a built-in bank
@@ -39,7 +39,7 @@ func main() {
 	// server still boots with a playable game.
 	prompts := game.LoadPromptsFromFile(os.Getenv("PROMPTS_FILE_PATH"))
 
-	game.Games = game.NewRegistry(tileKeys, prompts)
+	game.Games = game.NewRegistry(tileKeys, tilePos, prompts)
 
 	r := gin.Default()
 	// CORS setup - allow only specific origins

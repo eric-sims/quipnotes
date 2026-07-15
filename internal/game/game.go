@@ -126,7 +126,7 @@ type Manager struct {
 
 // newGame builds a fresh game seeded with its own copy of the tile pool (every
 // tile available) and its own shuffled prompt deck, so each game plays a unique
-// prompt order. tileKeys are the "<idx>|<word>" keys loaded once from CSV;
+// prompt order. tileKeys are the "<idx>|<word>" keys loaded once from the words file;
 // prompts is the base prompt list held by the Registry.
 func newGame(code string, tileKeys, prompts []string) *Manager {
 	wordTiles := make(map[string]PlayerId, len(tileKeys))
@@ -163,8 +163,12 @@ func (gm *Manager) Code() string {
 type Registry struct {
 	games    map[string]*Manager
 	tileKeys []string
-	prompts  []Prompt
-	mux      sync.RWMutex
+	// tilePos maps each base tile key to the word's part-of-speech tags.
+	// Immutable after startup and shared by every game (per-game pools copy
+	// only the keys), so reads need no locking.
+	tilePos map[string][]string
+	prompts []Prompt
+	mux     sync.RWMutex
 }
 
 // codeGenAttempts caps how many times we retry to find a free code before
@@ -172,14 +176,32 @@ type Registry struct {
 const codeGenAttempts = 100
 
 // NewRegistry creates an empty registry that seeds every new game from tileKeys
-// (the word pool) and prompts (the rated prompt bank).
-func NewRegistry(tileKeys []string, prompts []Prompt) *Registry {
+// (the word pool) and prompts (the rated prompt bank). tilePos carries the
+// part-of-speech tags per tile key (nil is fine — TilePos then reports none).
+func NewRegistry(tileKeys []string, tilePos map[string][]string, prompts []Prompt) *Registry {
 	return &Registry{
 		games:    make(map[string]*Manager),
 		tileKeys: tileKeys,
+		tilePos:  tilePos,
 		prompts:  prompts,
 		mux:      sync.RWMutex{},
 	}
+}
+
+// TilePos returns the part-of-speech tags for the given tile keys. Keys with
+// no known tags are omitted — clients treat those as "other". The underlying
+// map is immutable after startup, so no locking is needed.
+func (r *Registry) TilePos(keys []string) map[string][]string {
+	if len(r.tilePos) == 0 {
+		return nil
+	}
+	pos := make(map[string][]string, len(keys))
+	for _, key := range keys {
+		if tags, ok := r.tilePos[key]; ok {
+			pos[key] = tags
+		}
+	}
+	return pos
 }
 
 // CreateGame allocates a new game under a unique 4-digit code and returns it.

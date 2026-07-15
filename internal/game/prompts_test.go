@@ -77,7 +77,7 @@ func ratedRegistry() (*Registry, []string, []string) {
 	for _, t := range adult {
 		prompts = append(prompts, Prompt{Text: t, FamilyFriendly: false})
 	}
-	return NewRegistry(sampleTileKeys(), prompts), familyFriendly, adult
+	return NewRegistry(sampleTileKeys(), nil, prompts), familyFriendly, adult
 }
 
 // drawnPrompts starts one round per deck entry and returns the distinct prompts
@@ -143,7 +143,7 @@ func TestCreateGameFamilyFriendlyFallsBackWhenNoneRated(t *testing.T) {
 	for i, text := range adult {
 		prompts[i] = Prompt{Text: text, FamilyFriendly: false}
 	}
-	r := NewRegistry(sampleTileKeys(), prompts)
+	r := NewRegistry(sampleTileKeys(), nil, prompts)
 
 	g, err := r.CreateGame(true)
 	if err != nil {

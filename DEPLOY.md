@@ -10,7 +10,7 @@ always-on instance (no scale-to-zero, no multiple replicas).
 `master`, pushes it to **Artifact Registry**, copies the deploy config
 (`docker-compose.prod.yaml` + `Caddyfile`) to the VM, then SSHes in (over an IAP
 tunnel — no public SSH port) and tells it to pull the new image and restart. The
-image is **code only**; the proprietary `words.csv`, the optional `prompts.txt`,
+image is **code only**; the proprietary `words.txt`, the optional `prompts.txt`,
 and `.env` live on the VM (never sent from CI) and are mounted in at runtime.
 
 So after the one-time setup below, changing the app **or** the compose/Caddy
@@ -224,7 +224,7 @@ you exported earlier live on your laptop, not the VM, so type the values here.)
 
 ```bash
 cat > /opt/quipnotes/.env <<'EOF'
-WORDS_FILE_PATH=/data/words.csv
+WORDS_FILE_PATH=/data/words.txt
 PROMPTS_FILE_PATH=/data/prompts.txt
 GIN_MODE=release
 DOMAIN=api.example.com
@@ -232,11 +232,11 @@ ACME_EMAIL=you@example.com
 EOF
 ```
 
-Upload your proprietary `words.csv` (and optional `prompts.txt`) into
+Upload your proprietary `words.txt` (and optional `prompts.txt`) into
 `/opt/quipnotes/data/` (**from your machine**):
 
 ```bash
-gcloud compute scp data/words.csv "$VM":/opt/quipnotes/data/ \
+gcloud compute scp data/words.txt "$VM":/opt/quipnotes/data/ \
   --zone="$ZONE" --tunnel-through-iap
 # optional:
 # gcloud compute scp data/prompts.txt "$VM":/opt/quipnotes/data/ --zone="$ZONE" --tunnel-through-iap

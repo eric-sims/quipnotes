@@ -1,6 +1,6 @@
 # Runs on the GCE VM. Caddy terminates TLS (automatic Let's Encrypt certs) and
 # reverse-proxies to the Go server over the internal Docker network. The app
-# image is code-only; the proprietary words.csv, optional prompts.txt, and the
+# image is code-only; the proprietary words.txt, optional prompts.txt, and the
 # .env live on the VM under /opt/quipnotes and are mounted / injected at runtime.
 #
 #   Layout on the VM:
@@ -9,7 +9,7 @@
 #       ├── Caddyfile                  (reverse proxy config)
 #       ├── .env                       (WORDS_FILE_PATH, DOMAIN, ACME_EMAIL, ...)
 #       └── data/
-#           ├── words.csv
+#           ├── words.txt
 #           └── prompts.txt            (optional)
 #
 # QUIPNOTES_IMAGE is set by the deploy step (e.g. the Artifact Registry path
