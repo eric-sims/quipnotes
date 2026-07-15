@@ -25,7 +25,38 @@ func samplePrompts() []Prompt {
 
 // newTestRegistry wires a registry with the sample tile + prompt lists.
 func newTestRegistry() *Registry {
-	return NewRegistry(sampleTileKeys(), samplePrompts())
+	return NewRegistry(sampleTileKeys(), nil, samplePrompts())
+}
+
+// TestDrawWordTilesFailureReleasesLock guards against a regression where the
+// invalid-count and not-enough-tiles error paths returned while still holding
+// the game's mutex, deadlocking the game on the next call.
+func TestDrawWordTilesFailureReleasesLock(t *testing.T) {
+	r := newTestRegistry()
+	g, err := r.CreateGame(false)
+	if err != nil {
+		t.Fatalf("CreateGame: %v", err)
+	}
+	if err := g.AddPlayer("p1"); err != nil {
+		t.Fatalf("AddPlayer: %v", err)
+	}
+
+	// Invalid count (n <= 0 / n > total).
+	if _, err := g.DrawWordTiles(0, "p1"); err == nil {
+		t.Fatal("expected an error for a zero-count draw")
+	}
+	// Own most of the pool so a total-valid count exceeds what's available.
+	if _, err := g.DrawWordTiles(3, "p1"); err != nil {
+		t.Fatalf("setup draw: %v", err)
+	}
+	if _, err := g.DrawWordTiles(3, "p1"); err == nil {
+		t.Fatal("expected an error when fewer tiles are available than requested")
+	}
+	// A valid draw must still succeed — it would deadlock here if a failed
+	// draw leaked the lock.
+	if _, err := g.DrawWordTiles(2, "p1"); err != nil {
+		t.Fatalf("valid draw after failed draws: %v", err)
+	}
 }
 
 func TestCreateGameReturnsFourDigitCode(t *testing.T) {
@@ -393,7 +424,7 @@ func TestPromptDeckOrderVariesBetweenGames(t *testing.T) {
 	for i := range prompts {
 		prompts[i] = Prompt{Text: fmt.Sprintf("prompt-%02d", i), FamilyFriendly: true}
 	}
-	r := NewRegistry(sampleTileKeys(), prompts)
+	r := NewRegistry(sampleTileKeys(), nil, prompts)
 
 	drawAll := func() []string {
 		g, _ := r.CreateGame(false)

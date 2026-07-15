@@ -18,8 +18,12 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
+// WordsResponse is the player's whole pile. Pos maps each tile key to the
+// word's part-of-speech tags (a word can have several); keys with no known
+// tags are omitted and clients treat them as "other".
 type WordsResponse struct {
-	Words []string `json:"words"`
+	Words []string            `json:"words"`
+	Pos   map[string][]string `json:"pos,omitempty"`
 }
 
 type CreateGameResponse struct {
@@ -359,7 +363,7 @@ func ServeEvents(c *gin.Context) {
 // DrawTiles godoc
 //
 //	@Summary		Draws Tiles
-//	@Description	Draws Tiles (wordTiles) for a given player and a given count
+//	@Description	Draws Tiles (wordTiles) for a given player and a given count. Returns the player's entire pile plus a pos map of part-of-speech tags per tile key.
 //	@Router			/games/{code}/draw [post]
 //	@Accept			json
 //	@Produce		json
@@ -387,13 +391,13 @@ func DrawTiles(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, WordsResponse{words})
+	c.JSON(http.StatusOK, WordsResponse{Words: words, Pos: Games.TilePos(words)})
 }
 
 // GetTiles godoc
 //
 //	@Summary		Gets Drawn Tiles
-//	@Description	Gets all the tiles that are drawn by the player.
+//	@Description	Gets all the tiles that are drawn by the player, plus a pos map of part-of-speech tags per tile key.
 //	@Router			/games/{code}/players/{id}/tiles [get]
 //	@Produce		json
 //	@Param			code	path		string	true	"game code"
@@ -420,7 +424,7 @@ func GetTiles(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, WordsResponse{words})
+	c.JSON(http.StatusOK, WordsResponse{Words: words, Pos: Games.TilePos(words)})
 }
 
 type SubmitNoteRequest struct {

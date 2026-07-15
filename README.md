@@ -35,7 +35,7 @@ go run .                  # serves on :8081 (override with PORT)
 ```
 
 Requires **Go 1.21+**. The server **panics on startup** if `.env` is missing or
-`WORDS_FILE_PATH` doesn't point to a readable CSV. Once running, the interactive API docs
+`WORDS_FILE_PATH` doesn't point to a readable words file. Once running, the interactive API docs
 are at <http://localhost:8081/swagger/index.html>.
 
 ```bash
@@ -50,18 +50,26 @@ Set via `.env` (see [`.env.example`](.env.example)):
 
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
-| `WORDS_FILE_PATH` | **yes** | — | Path to the word-tile CSV. Missing/unreadable → panic on boot. |
+| `WORDS_FILE_PATH` | **yes** | — | Path to the word-tile file (`words.txt`). Missing/unreadable → panic on boot. |
 | `PROMPTS_FILE_PATH` | no | built-in bank | Path to the prompts file. Unset/unreadable → log a warning and use a built-in family-friendly bank. |
 | `PORT` | no | `8081` | Port to bind. |
 | `GIN_MODE` | no | `debug` | `release` in production to quiet Gin. |
 
-### `words.csv`
+### `words.txt`
 
-Ransom Notes' word tiles are proprietary, so no `words.csv` is committed. Buy a copy and
+Ransom Notes' word tiles are proprietary, so no `words.txt` is committed. Buy a copy and
 index the tiles (about 15 minutes), or bring **any** word list you like.
 
-- One column, **no header row** — one word per line.
-- Duplicate words are fine; each row becomes a distinct tile keyed `"<rowIndex>|<word>"`.
+- One word per line, prefixed with one or more **part-of-speech markers** listing every
+  part of speech the word can be, e.g. `[noun][verb] play`. Valid markers: `[noun]`
+  `[verb]` `[adjective]` `[adverb]` `[pronoun]` `[preposition]` `[conjunction]`
+  `[interjection]` `[other]` (punctuation, suffix tiles, articles).
+- Blank lines are ignored; a line starting with `#` is a comment. The parser is
+  forgiving: an unknown marker is dropped with a warning and an unmarked word defaults
+  to `[other]`.
+- Duplicate words are fine; each word line becomes a distinct tile keyed
+  `"<index>|<word>"`. The tags are served to clients per tile key in the `pos` field of
+  the draw/tiles responses, so players can browse their pile grouped by part of speech.
 
 ### `prompts.txt` (optional)
 
@@ -103,15 +111,17 @@ Play runs in **rounds** — one active prompt each:
   each 4-digit code to a `game.Manager` — one game with its own players, tile pool,
   submitted notes, prompt deck, scores, and judging state, each behind its own mutex. No
   database.
-- **Tile wire format `"<id>|<word>"`.** The numeric id (CSV row index) keeps duplicate
-  words distinct across the whole protocol. Notes are stored as ordered token lists — tile
-  keys plus a reserved `"\n"` break token for line breaks — never flattened to a string.
+- **Tile wire format `"<id>|<word>"`.** The numeric id (the word's index in the words
+  file) keeps duplicate words distinct across the whole protocol. Notes are stored as
+  ordered token lists — tile keys plus a reserved `"\n"` break token for line breaks —
+  never flattened to a string. Part-of-speech tags never ride in the token itself: the
+  draw/tiles responses carry them in a separate `pos` map keyed by tile key.
 - **WebSockets for push.** `GET /games/:code/events` streams round/judging/roster events and
   replays the current round's lifecycle on connect so refreshes and late joins recover
   mid-round. Player actions still go over the REST endpoints; the socket is push-only.
 
 The routes, handlers (with Swagger annotations), and the full event catalog live in
-`internal/game/router.go`; pure game logic in `game.go`; CSV/prompt loading in `words.go`
+`internal/game/router.go`; pure game logic in `game.go`; word/prompt loading in `words.go`
 and `prompts.go`; the WebSocket hub in `hub.go`. See [`CLAUDE.md`](CLAUDE.md) for a
 detailed map of the state model and every endpoint. Interactive API docs are served at
 `/swagger/index.html`.
@@ -134,5 +144,5 @@ container.
 The code in this repository is licensed under the [MIT License](LICENSE).
 
 The Ransom Notes word tiles and prompt cards are **proprietary** to Very Special Games and
-are **not** covered by this license — none are committed here. Supply your own `words.csv`
+are **not** covered by this license — none are committed here. Supply your own `words.txt`
 and (optionally) prompts file as described under [Configuration](#configuration).
